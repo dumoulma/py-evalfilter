@@ -2,30 +2,61 @@
 import logging
 
 import click
-from datasets.fuman_raw import load_fuman_csv, load_rants
 from sklearn.feature_extraction.text import TfidfVectorizer
-import scipy.sparse as sp
-import sklearn.preprocessing as pp
-import numpy as np
-from mecab import tokenize_pos, tokenize_rant
+
+from datasets.fuman_raw import load_fuman_csv, load_rants, get_header
+from mecab import tokenize_pos, tokenize_rant, STOPWORDS
 
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
 
 @click.command()
-@click.argument('filename', type=click.Path(), nargs=1)
-def main(filename):
-    wdvec = TfidfVectorizer(tokenizer=tokenize_rant, strip_accents='unicode', min_df=100, max_features=5000)
-    rants_vects = wdvec.fit_transform(load_rants(filepath=filename))
+@click.argument('source', type=click.Path(), nargs=1)
+@click.argument('output', type=click.Path(), nargs=1)
+def main(source, output):
+    wdvec = TfidfVectorizer(tokenizer=tokenize_rant, strip_accents='unicode', stop_words=STOPWORDS,
+                            min_df=100, max_features=5000)
+    rants_vects = wdvec.fit_transform(load_rants(filepath=source))
     print(rants_vects.shape)
-    posvec = TfidfVectorizer(tokenizer=tokenize_pos, ngram_range=(1, 3), strip_accents='unicode', min_df=10,
+    posvec = TfidfVectorizer(tokenizer=tokenize_pos, ngram_range=(1, 3), strip_accents='unicode', min_df=200,
                              max_features=5000)
-    pos_vects = posvec.fit_transform(load_rants(filepath=filename))
-    wd_pos_vecs = sp.hstack((rants_vects, pos_vects), format='csr')
+    pos_vects = posvec.fit_transform(load_rants(filepath=source))
     print(pos_vects.shape)
-    X = list(load_fuman_csv(filename, target_var_func=set_goodvsbad_label))
-    print("{} negatives found".format(abs(sum(filter(lambda x: x is 1, [x[-1] for x in X])))))
+    X = list(load_fuman_csv(source, target_var_func=set_goodvsbad_label))
+    print("{} negatives found".format(abs(sum(filter(lambda label: label is 1, [x[-1] for x in X])))))
     logging.info("Got {} rows".format(len(X)))
+    logging.info("x={} pos={} wd={}".format(len(X[0]), pos_vects.shape[1], rants_vects.shape[1]))
+    with open(output, 'w', encoding='utf-8') as out:
+        out.write(generate_header(pos_vects, rants_vects))
+        for i, x in enumerate(X):
+            features = ','.join(str(i) for i in x[:-1]) + ','
+            pos = ','.join(str(j) for j in pos_vects[i].todense().tolist()[0]) + ','
+            wd = ','.join(str(k) for k in rants_vects[i].todense().tolist()[0]) + ','
+            row = features + pos + wd + str(x[-1]) + '\n'
+            if i % 1000 is 0:
+                logging.info("{}:{}".format(i, len(row.split(','))))
+            out.write(row)
+
+
+def generate_header(pos_vects, rants_vects):
+    header = get_header()
+    pos_header = generate_pos_headers(pos_vects)
+    words_header = generate_word_headers(rants_vects)
+    target_header = "target"
+    final_header = ','.join((header, pos_header, words_header, target_header)) + '\n'
+    logging.info("Header: features:{} pos:{} wd:{} final:{}".format(len(header.split(',')),
+                                                                    len(pos_header.split(',')),
+                                                                    len(words_header.split(',')),
+                                                                    len(final_header.split(','))))
+    return final_header
+
+
+def generate_pos_headers(pos_vect):
+    return ','.join(["pos" + str(i) for i in range(pos_vect.shape[1])])
+
+
+def generate_word_headers(word_vect):
+    return ','.join(["wd" + str(i) for i in range(word_vect.shape[1])])
 
 
 # def encode_categoricals(X):

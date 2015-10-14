@@ -2,9 +2,16 @@ import logging
 import csv
 
 import unicodedata
-from datasets.computed_features import add_manual_features
+import datasets.computed_features as cf
 
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
+
+
+def get_header():
+    header = "hasIndustry,hasOccupation,hasCompany,hasProductName,hasProposal,empathies,"
+    header += "birthyear,state,gender,job,"
+    header += cf.get_header()
+    return header
 
 
 def load_rants(filepath):
@@ -32,17 +39,18 @@ def load_fuman_csv(filepath, target_var_func=None) -> list:
             x.append(row[12])  # state
             x.append(get_gender(row[13]))  # gender
             x.append(row[14])  # job
-            x = add_manual_features(x, rant=unicodedata.normalize('NFKC', row[5]))
+            x = cf.add_manual_features(x, rant=unicodedata.normalize('NFKC', row[5]))
             status = int(row[6])
             price = int(row[15])
         except ValueError as ve:
             logging.warning("Parse problem for rant {} ({})".format(row[0], ve))
             continue
+        # target should be added last
         if target_var_func is None:
             x.append(status)  # status
             x.append(price)  # price
         else:
-            x.append(target_var_func(status, price))
+            x.append(target_var_func(status, price))  # target
         if i % 1000 is 0:
             logging.info("{}: {}".format(i, x))
         yield x

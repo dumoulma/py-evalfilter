@@ -1,8 +1,8 @@
 import logging
-
-import unicodedata
 import collections
 from functools import partial
+
+import unicodedata
 from mecab import tokenize_rant
 
 KATAKANA = "KATAKANA"
@@ -13,25 +13,30 @@ DIGIT = "DIGIT"
 SYMBOL = {'!', '?'}
 
 
+def get_header():
+    return "katacount,hiracount,kanjicount,alphacount,digitcount,symbolcount,totaltokens,1chartokens," + \
+           "2chartokens,3chartokens,4chartokens,5+chartokens,avgTokLength"
+
+
 def add_manual_features(x, rant):
-    x.append(count_unicode_chars(rant, KATAKANA))
-    x.append(count_unicode_chars(rant, HIRAGANA))
-    x.append(count_unicode_chars(rant, KANJI))
-    x.append(count_unicode_chars(rant, ALPHA))
-    x.append(count_unicode_chars(rant, DIGIT))
-    x.append(len(list(filter(is_symbol, rant))))
+    x.append(count_unicode_chars(rant, KATAKANA))  # katacount
+    x.append(count_unicode_chars(rant, HIRAGANA))  # hiracount
+    x.append(count_unicode_chars(rant, KANJI))  # kanjicount
+    x.append(count_unicode_chars(rant, ALPHA))  # alphacount
+    x.append(count_unicode_chars(rant, DIGIT))  # digitcount
+    x.append(len(list(filter(is_symbol, rant))))  # symbolcount
     counts_dict = token_counts(tokenize_rant(rant))
     total_tokens = sum(counts_dict.values())
-    x.append(total_tokens)
-    x.append(counts_dict[1])
-    x.append(counts_dict[2])
-    x.append(counts_dict[3])
-    x.append(counts_dict[4])
-    x.append(len(list(filter(lambda k: k >= 5, counts_dict.keys()))))
+    x.append(total_tokens)  # totaltokens (words)
+    x.append(counts_dict[1])  # 1chartokens
+    x.append(counts_dict[2])  # 2chartokens
+    x.append(counts_dict[3])  # 3chartokens
+    x.append(counts_dict[4])  # 4chartokens
     if total_tokens > 0:
-        x.append(sum(counts_dict.values()) / total_tokens)
+        x.append(sum(counts_dict.values()) / total_tokens)  # 5+chartokens
     else:
         x.append(0)
+    x.append(len(list(filter(lambda k: k >= 5, counts_dict.keys()))))  # avgTokLength
     return x
 
 
