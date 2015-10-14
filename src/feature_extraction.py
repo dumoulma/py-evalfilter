@@ -13,29 +13,43 @@ logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=lo
 @click.command()
 @click.argument('source', type=click.Path(), nargs=1)
 @click.argument('output', type=click.Path(), nargs=1)
-def main(source, output):
+@click.option('--split_size', default=20000)
+def main(source, output, split_size):
     wdvec = TfidfVectorizer(tokenizer=tokenize_rant, strip_accents='unicode', stop_words=STOPWORDS,
                             min_df=100, max_features=5000)
     rants_vects = wdvec.fit_transform(load_rants(filepath=source))
-    print(rants_vects.shape)
-    posvec = TfidfVectorizer(tokenizer=tokenize_pos, ngram_range=(1, 3), strip_accents='unicode', min_df=200,
-                             max_features=5000)
+    logging.info("Rants vectorized: {}".format(rants_vects.shape))
+    posvec = TfidfVectorizer(tokenizer=tokenize_pos, ngram_range=(1, 3), strip_accents='unicode', max_features=5000)
     pos_vects = posvec.fit_transform(load_rants(filepath=source))
-    print(pos_vects.shape)
+    logging.info("POS vectorized: {}".format(pos_vects.shape))
+
     X = list(load_fuman_csv(source, target_var_func=set_goodvsbad_label))
     print("{} negatives found".format(abs(sum(filter(lambda label: label is 1, [x[-1] for x in X])))))
     logging.info("Got {} rows".format(len(X)))
     logging.info("x={} pos={} wd={}".format(len(X[0]), pos_vects.shape[1], rants_vects.shape[1]))
-    with open(output, 'w', encoding='utf-8') as out:
-        out.write(generate_header(pos_vects, rants_vects))
-        for i, x in enumerate(X):
-            features = ','.join(str(i) for i in x[:-1]) + ','
-            pos = ','.join(str(j) for j in pos_vects[i].todense().tolist()[0]) + ','
-            wd = ','.join(str(k) for k in rants_vects[i].todense().tolist()[0]) + ','
-            row = features + pos + wd + str(x[-1]) + '\n'
-            if i % 1000 is 0:
-                logging.info("{}:{}".format(i, len(row.split(','))))
-            out.write(row)
+
+    # output to CSV
+    split = 1
+    n = 0
+    n_instances = rants_vects.shape[0]
+    while n < n_instances:
+        output_filename = output + "-" + str(split)
+        logging.info("Writing to: " + output_filename)
+        next_start = n
+        with open(output_filename, 'w', encoding='utf-8') as out:
+            out.write(generate_header(pos_vects, rants_vects))
+            for i in range(next_start, min(n_instances, next_start + split_size)):
+                x = X[i]
+                features = ','.join(str(i) for i in x[:-1]) + ','
+                pos = ','.join(str(j) for j in pos_vects[i].todense().tolist()[0]) + ','
+                wd = ','.join(str(k) for k in rants_vects[i].todense().tolist()[0]) + ','
+                row = features + pos + wd + str(x[-1]) + '\n'
+                if i and i % 1000 == 0:
+                    logging.info("{}:{}".format(i, len(row.split(','))))
+                out.write(row)
+                n += 1
+            logging.info("Wrote {} instances".format(n - next_start))
+            split += 1
 
 
 def generate_header(pos_vects, rants_vects):
