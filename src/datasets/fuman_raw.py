@@ -1,0 +1,89 @@
+import logging
+import csv
+
+import unicodedata
+from datasets.computed_features import add_manual_features
+
+logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
+
+
+def load_rants(filepath):
+    for row in FumanDataset(filepath):
+        if len(row) is not 16:
+            logging.debug("Badly formated row: {}".format(row))
+            continue
+        yield unicodedata.normalize('NFKC', row[5])
+
+
+def load_fuman_csv(filepath, target_var_func=None) -> list:
+    for i, row in enumerate(FumanDataset(filepath)):
+        if len(row) is not 16:
+            logging.debug("Badly formated row: expected 16 fields, got {}".format(len(row)))
+            continue
+        x = list()
+        try:
+            x.append(int(row[1]))  # has industry
+            x.append(int(row[2]))  # has occupation
+            x.append(int(row[3]))  # has company
+            x.append(int(row[4]))  # has product name
+            x.append(int(row[7]))  # has proposal
+            x.append(int(row[8]))  # empathies
+            x.append(row[11])  # birth year
+            x.append(row[12])  # state
+            x.append(get_gender(row[13]))  # gender
+            x.append(row[14])  # job
+            x = add_manual_features(x, rant=unicodedata.normalize('NFKC', row[5]))
+            status = int(row[6])
+            price = int(row[15])
+        except ValueError as ve:
+            logging.warning("Parse problem for rant {} ({})".format(row[0], ve))
+            continue
+        if target_var_func is None:
+            x.append(status)  # status
+            x.append(price)  # price
+        else:
+            x.append(target_var_func(status, price))
+        if i % 1000 is 0:
+            logging.info("{}: {}".format(i, x))
+        yield x
+
+
+def get_gender(field):
+    if field == '''\\0''':
+        return 0
+    try:
+        g = int(field)
+    except ValueError as ve:
+        logging.warning("Can't parse gender, set to UNKNOWN (got: {})".format(ve))
+        return 0
+    return g
+
+
+class FumanDataset(object):
+    """
+        Streams through the rants from the Fuman DB dump CSV file found
+        in 'filename', up to a maximum of k posts.
+
+        usage: for post in rant_iter(filename='path/to/file.csv')
+        :returns post (Str)
+    """
+
+    def __init__(self, file_path):
+        self.file_path = file_path
+
+    def __iter__(self):
+        with open(self.file_path, newline='') as csvfile:
+            reader = csv.reader(csvfile, delimiter=',', quotechar="'")
+            headers = next(reader)  # skip headers
+            logging.info("Got headers: {}".format(headers))
+            for row in reader:
+                yield row
+
+
+if __name__ == "__main__":
+    pass
+    # s = 'ミッドソールにはSpEVAと、Solyteを組み合わせたフルイドライドを採用し、流れるようになめらかな走り心地が実現。'
+    # tokens = _tokenize(s)
+    #
+    # # id,hasIndustry,hasOccupation,hasCompany,hasProductName,rants,status,hasProposals,empathies,hasLatitude,
+    # # hasLongitude,birth_year,state,gender,job,price
