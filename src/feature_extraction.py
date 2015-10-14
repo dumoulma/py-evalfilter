@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 import logging
+import sys
 
 import click
+
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 from datasets.fuman_raw import load_fuman_csv, load_rants, get_header
@@ -13,13 +15,18 @@ logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=lo
 @click.command()
 @click.argument('source', type=click.Path(), nargs=1)
 @click.argument('output', type=click.Path(), nargs=1)
-@click.option('--split_size', default=20000)
-def main(source, output, split_size):
+@click.option('--split_size', default=sys.maxsize)
+@click.option('--max_word_features', default=5000)
+@click.option('--max_pos_features', default=5000)
+@click.option('--word_min_df', default=100)
+@click.option('--pos_min_df', default=100)
+def main(source, output, split_size, max_word_features, max_pos_features, word_min_df, pos_min_df):
     wdvec = TfidfVectorizer(tokenizer=tokenize_rant, strip_accents='unicode', stop_words=STOPWORDS,
-                            min_df=100, max_features=5000)
+                            min_df=word_min_df, max_features=max_word_features)
     rants_vects = wdvec.fit_transform(load_rants(filepath=source))
     logging.info("Rants vectorized: {}".format(rants_vects.shape))
-    posvec = TfidfVectorizer(tokenizer=tokenize_pos, ngram_range=(1, 3), strip_accents='unicode', max_features=5000)
+    posvec = TfidfVectorizer(tokenizer=tokenize_pos, ngram_range=(1, 3), strip_accents='unicode', min_df=pos_min_df,
+                             max_features=max_pos_features)
     pos_vects = posvec.fit_transform(load_rants(filepath=source))
     logging.info("POS vectorized: {}".format(pos_vects.shape))
 
