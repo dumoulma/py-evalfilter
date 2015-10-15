@@ -12,8 +12,6 @@ from mecab import tokenize_pos, tokenize_rant, STOPWORDS
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
 ALLSCORED = 'all-scored-rants.csv'
-GOOD = 'good-rants.csv'
-BAD = 'bad-rants.csv'
 
 
 @click.command()
@@ -41,51 +39,57 @@ def main(source, output, split_size, max_splits, max_word_features, max_pos_feat
     :param word_min_df: parameter for tf-idf vectorizer
     :param pos_min_df: parameter for tf-idf vectorizer
     """
-    all_filepath = os.path.join(source, ALLSCORED)
+    if os.path.isfile(source):
+        source_filepath = source
+    else:
+        source_filepath = os.path.join(source, ALLSCORED)
     wdvec = TfidfVectorizer(tokenizer=tokenize_rant, strip_accents='unicode', stop_words=STOPWORDS,
                             min_df=word_min_df, max_features=max_word_features)
-    rants_vects = wdvec.fit_transform(load_rants(filepath=all_filepath))
+    rants_vects = wdvec.fit_transform(load_rants(filepath=source_filepath))
     logging.info("Rants vectorized: {}".format(rants_vects.shape))
     posvec = TfidfVectorizer(tokenizer=tokenize_pos, ngram_range=(1, 3), strip_accents='unicode', min_df=pos_min_df,
                              max_features=max_pos_features)
-    pos_vects = posvec.fit_transform(load_rants(filepath=all_filepath))
+    pos_vects = posvec.fit_transform(load_rants(filepath=source_filepath))
     logging.info("POS vectorized: {}".format(pos_vects.shape))
     logging.info("Shape: pos={} wd={}".format(pos_vects.shape, rants_vects.shape))
 
-    good_instances = list(load_fuman_csv(os.path.join(source, GOOD), target_var_func=set_goodvsbad_label))
-    bad_instances = list(load_fuman_csv(os.path.join(source, BAD), target_var_func=set_goodvsbad_label))
-    logging.info("Got {} good and {} bad".format(len(good_instances), len(bad_instances)))
+    instances = list(load_fuman_csv(source_filepath, target_var_func=set_goodvsbad_label))
+    good_indices = list(i for i, x in enumerate(instances) if x[-1] is -1)
+    bad_indices = list(i for i, x in enumerate(instances) if x[-1] is 1)
 
     # output to CSV
     split = 1
     n = 0
+    m = 0
     n_instances = rants_vects.shape[0]
+    n_bad = len(bad_indices)
+    n_good = len(good_indices)
     while split <= max_splits and n < n_instances:
         output_filename = os.path.join(output, "{}-{}.csv".format("goodvsbad", split))
         logging.info("Writing to: " + output_filename)
-        next_start = n
+        split_end = min(n_good, n + split_size)
         with open(output_filename, 'w', encoding='utf-8') as out:
             out.write(generate_header(pos_vects, rants_vects))
-            for i, x in enumerate(bad_instances):
-                row = make_csv_row(i, x, pos_vects, rants_vects)
+            for i in bad_indices:
+                row = make_csv_row(instances[i], i, pos_vects, rants_vects)
                 out.write(row)
-                n += 1
-            for i in range(next_start, min(n_instances, next_start + split_size)):
-                x = good_instances[i]
-                row = make_csv_row(i, x, pos_vects, rants_vects)
+            for i in range(m, split_end):
+                row = make_csv_row(instances[good_indices[i]], i, pos_vects, rants_vects)
                 out.write(row)
-                n += 1
-            logging.info("Wrote {} instances".format(n - next_start))
-            split += 1
+                m += 1
+            n = m + (split - 1) * n_bad
+        logging.info("Wrote {} instances (total: {})".format(n - (split - 1) * split_size, n))
+        split += 1
 
 
-def make_csv_row(i, x, pos_vects, rants_vects) -> str:
+def make_csv_row(x, i, pos_vects, rants_vects) -> str:
     features = ','.join(str(i) for i in x[:-1]) + ','
     pos = ','.join(str(j) for j in pos_vects[i].todense().tolist()[0]) + ','
     wd = ','.join(str(k) for k in rants_vects[i].todense().tolist()[0]) + ','
     row = features + pos + wd + str(x[-1]) + '\n'
     if i and i % 1000 == 0:
-        logging.info("{}:{}".format(i, len(row.split(','))))
+        logging.debug("{}:{}\t{}".format(i, row.split(',')[-1], row.split(',')[:25]))
+        logging.debug("{}:{}".format(i, len(row.split(','))))
     return row
 
 
@@ -95,10 +99,10 @@ def generate_header(pos_vects, rants_vects):
     words_header = generate_word_headers(rants_vects)
     target_header = "target"
     final_header = ','.join((header, pos_header, words_header, target_header)) + '\n'
-    logging.info("Header: features:{} pos:{} wd:{} final:{}".format(len(header.split(',')),
-                                                                    len(pos_header.split(',')),
-                                                                    len(words_header.split(',')),
-                                                                    len(final_header.split(','))))
+    logging.debug("Header: features:{} pos:{} wd:{} final:{}".format(len(header.split(',')),
+                                                                     len(pos_header.split(',')),
+                                                                     len(words_header.split(',')),
+                                                                     len(final_header.split(','))))
     return final_header
 
 
@@ -110,17 +114,30 @@ def generate_word_headers(word_vect):
     return ','.join(["wd" + str(i) for i in range(word_vect.shape[1])])
 
 
-# def encode_categoricals(X):
-#     age_enc = pp.LabelEncoder()
-#     encoded_age = age_enc.fit_transform([x[6] for x in X])
-#     state_enc = pp.LabelEncoder()
-#     encoded_state = state_enc.fit_transform([x[7] for x in X])
-#     job_enc = pp.LabelEncoder()
-#     encoded_job = job_enc.fit_transform([x[9] for x in X])
-#     for x, ea, es, ej in zip(X, encoded_age, encoded_state, encoded_job):
-#         x[6] = ea
-#         x[7] = es
-#         x[9] = ej
+def encode_categoricals(X):
+    """
+    Transforms the categorical string values into int (necessary for some algorithms that can't process strings).
+    :param X:
+    :return:
+    """
+    import sklearn.preprocessing as pp
+    age_enc = pp.LabelEncoder()
+    encoded_age = age_enc.fit_transform([x[6] for x in X])
+    state_enc = pp.LabelEncoder()
+    encoded_state = state_enc.fit_transform([x[7] for x in X])
+    job_enc = pp.LabelEncoder()
+    encoded_job = job_enc.fit_transform([x[9] for x in X])
+    for x, ea, es, ej in zip(X, encoded_age, encoded_state, encoded_job):
+        x[6] = ea
+        x[7] = es
+        x[9] = ej
+
+
+def categorical_to_binary(X):
+    import sklearn.preprocessing as pp
+    values = [len(set(x[6] for x in X)), len(set(x[6] for x in X)), len(set(x[6] for x in X))]
+    ohe = pp.OneHotEncoder(n_values=values, categorical_features=[6, 7, 9], sparse=False)
+    return ohe.fit_transform(X)
 
 
 def set_goodvsbad_label(status, _):

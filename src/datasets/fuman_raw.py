@@ -19,6 +19,12 @@ def load_rants(filepath):
         if len(row) is not 16:
             logging.debug("Badly formated row: {}".format(row))
             continue
+        # must replicate the behaviour of load_fuman_csv
+        try:
+            int(row[1]), int(row[2]), int(row[3]), int(row[4]), int(row[6]), int(row[7]), int(row[8]), int(row[15])
+        except ValueError as ve:
+            logging.warning("Parse problem for rant {} ({})".format(row[0], ve))
+            continue
         yield unicodedata.normalize('NFKC', row[5])
 
 
