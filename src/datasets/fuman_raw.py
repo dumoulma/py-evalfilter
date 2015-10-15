@@ -52,7 +52,7 @@ def load_fuman_csv(filepath, target_var_func=None) -> list:
         else:
             x.append(target_var_func(status, price))  # target
         if i % 1000 is 0:
-            logging.info("{}: {}".format(i, x))
+            logging.debug("{}: {}".format(i, x))
         yield x
 
 

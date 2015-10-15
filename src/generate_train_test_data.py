@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import logging
-import sys
+import os
 
 import click
 
@@ -11,52 +11,82 @@ from mecab import tokenize_pos, tokenize_rant, STOPWORDS
 
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
+ALLSCORED = 'all-scored-rants.csv'
+GOOD = 'good-rants.csv'
+BAD = 'bad-rants.csv'
+
 
 @click.command()
 @click.argument('source', type=click.Path(), nargs=1)
 @click.argument('output', type=click.Path(), nargs=1)
-@click.option('--split_size', default=sys.maxsize)
+@click.option('--split_size', default=1000000)
+@click.option('--max_splits', default=2)
 @click.option('--max_word_features', default=5000)
 @click.option('--max_pos_features', default=5000)
 @click.option('--word_min_df', default=100)
 @click.option('--pos_min_df', default=100)
-def main(source, output, split_size, max_word_features, max_pos_features, word_min_df, pos_min_df):
+def main(source, output, split_size, max_splits, max_word_features, max_pos_features, word_min_df, pos_min_df):
+    """
+    Generates a training dataset from Fuman user posts.
+
+    Concatenates simple features from the database, hand crafted features based on various character and word counts,
+    and Tf-Idf weighted bag of words based on the text as well as the part-of-speech tags of Fuman user posts.
+
+    :param source: directory of the input files. assumes the file names are the same as the dump script output.
+    :param output: the output directory
+    :param split_size: the size (in instances) of each split of the data
+    :param max_splits: the number of splits to generate
+    :param max_word_features: parameter for tf-idf vectorizer
+    :param max_pos_features: parameter for tf-idf vectorizer
+    :param word_min_df: parameter for tf-idf vectorizer
+    :param pos_min_df: parameter for tf-idf vectorizer
+    """
+    all_filepath = os.path.join(source, ALLSCORED)
     wdvec = TfidfVectorizer(tokenizer=tokenize_rant, strip_accents='unicode', stop_words=STOPWORDS,
                             min_df=word_min_df, max_features=max_word_features)
-    rants_vects = wdvec.fit_transform(load_rants(filepath=source))
+    rants_vects = wdvec.fit_transform(load_rants(filepath=all_filepath))
     logging.info("Rants vectorized: {}".format(rants_vects.shape))
     posvec = TfidfVectorizer(tokenizer=tokenize_pos, ngram_range=(1, 3), strip_accents='unicode', min_df=pos_min_df,
                              max_features=max_pos_features)
-    pos_vects = posvec.fit_transform(load_rants(filepath=source))
+    pos_vects = posvec.fit_transform(load_rants(filepath=all_filepath))
     logging.info("POS vectorized: {}".format(pos_vects.shape))
+    logging.info("Shape: pos={} wd={}".format(pos_vects.shape, rants_vects.shape))
 
-    X = list(load_fuman_csv(source, target_var_func=set_goodvsbad_label))
-    print("{} negatives found".format(abs(sum(filter(lambda label: label is 1, [x[-1] for x in X])))))
-    logging.info("Got {} rows".format(len(X)))
-    logging.info("x={} pos={} wd={}".format(len(X[0]), pos_vects.shape[1], rants_vects.shape[1]))
+    good_instances = list(load_fuman_csv(os.path.join(source, GOOD), target_var_func=set_goodvsbad_label))
+    bad_instances = list(load_fuman_csv(os.path.join(source, BAD), target_var_func=set_goodvsbad_label))
+    logging.info("Got {} good and {} bad".format(len(good_instances), len(bad_instances)))
 
     # output to CSV
     split = 1
     n = 0
     n_instances = rants_vects.shape[0]
-    while n < n_instances:
-        output_filename = output + "-" + str(split)
+    while split <= max_splits and n < n_instances:
+        output_filename = os.path.join(output, "{}-{}.csv".format("goodvsbad", split))
         logging.info("Writing to: " + output_filename)
         next_start = n
         with open(output_filename, 'w', encoding='utf-8') as out:
             out.write(generate_header(pos_vects, rants_vects))
+            for i, x in enumerate(bad_instances):
+                row = make_csv_row(i, x, pos_vects, rants_vects)
+                out.write(row)
+                n += 1
             for i in range(next_start, min(n_instances, next_start + split_size)):
-                x = X[i]
-                features = ','.join(str(i) for i in x[:-1]) + ','
-                pos = ','.join(str(j) for j in pos_vects[i].todense().tolist()[0]) + ','
-                wd = ','.join(str(k) for k in rants_vects[i].todense().tolist()[0]) + ','
-                row = features + pos + wd + str(x[-1]) + '\n'
-                if i and i % 1000 == 0:
-                    logging.info("{}:{}".format(i, len(row.split(','))))
+                x = good_instances[i]
+                row = make_csv_row(i, x, pos_vects, rants_vects)
                 out.write(row)
                 n += 1
             logging.info("Wrote {} instances".format(n - next_start))
             split += 1
+
+
+def make_csv_row(i, x, pos_vects, rants_vects) -> str:
+    features = ','.join(str(i) for i in x[:-1]) + ','
+    pos = ','.join(str(j) for j in pos_vects[i].todense().tolist()[0]) + ','
+    wd = ','.join(str(k) for k in rants_vects[i].todense().tolist()[0]) + ','
+    row = features + pos + wd + str(x[-1]) + '\n'
+    if i and i % 1000 == 0:
+        logging.info("{}:{}".format(i, len(row.split(','))))
+    return row
 
 
 def generate_header(pos_vects, rants_vects):
