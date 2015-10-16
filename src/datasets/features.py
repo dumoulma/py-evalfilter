@@ -106,6 +106,8 @@ def tfidf_word(raw_documents, tokenizer, stop_words, min_df, max_features):
 
 
 def tfidf_pos(raw_documents, tokenizer, ngram_range, min_df, max_features):
+    if max_features is 0:
+        return sp.csr_matrix([])
     posvec = TfidfVectorizer(tokenizer=tokenizer, ngram_range=ngram_range, strip_accents='unicode', min_df=min_df,
                              max_features=max_features)
     pos_vects = posvec.fit_transform(raw_documents)

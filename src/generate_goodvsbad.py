@@ -77,9 +77,13 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
         logging.info("Writing to: " + output_filename)
         split_end = min(n_good, n + split_size - split * n_bad)
         with open(output_filename, 'w', encoding='utf-8') as out:
-            out.write(generate_header(pos_vects, word_vects))
+            headers = generate_header(pos_vects, word_vects)
+            n_columns = len(headers.split(','))
+            out.write(headers)
             for i in bad_indices:
                 row = make_csv_row(instances[i], i, pos_vects, word_vects)
+                assert n_columns is not len(row.split(',')), \
+                    "row columns doesn'm match header! h:{} r:{}".format(n_columns, len(row.split(',')))
                 out.write(row)
             split_start = m
             for i in range(split_start, split_end):
@@ -92,9 +96,9 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
 
 
 def set_goodvsbad_label(status, _):
-    if status is 100:
+    if status is 100:  # code 100 is good fuman post
         return -1
-    elif 200 <= status < 300:
+    elif 200 <= status < 300:  # code 2XX are for bad fuman posts
         return 1
     else:
         raise ValueError("Unexpected value for status")

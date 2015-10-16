@@ -5,7 +5,10 @@ from datasets.fuman_raw import get_header
 
 def make_csv_row(x, i, pos_vects, rants_vects) -> str:
     features = ','.join(str(i) for i in x[:-1]) + ','
-    pos = ','.join(str(j) for j in pos_vects[i].todense().tolist()[0]) + ','
+    if pos_vects.shape[1] is 0:
+        pos = ''
+    else:
+        pos = ','.join(str(j) for j in pos_vects[i].todense().tolist()[0]) + ','
     if rants_vects.shape[1] is 0:
         wd = ''
     else:
@@ -18,23 +21,15 @@ def make_csv_row(x, i, pos_vects, rants_vects) -> str:
 
 
 def generate_header(pos_vects, rants_vects):
-    header = get_header()
-    pos_header = generate_pos_headers(pos_vects)
-    words_header = generate_word_headers(rants_vects)
-    target_header = "target"
-    final_header = ','.join((header, pos_header, words_header, target_header)) + '\n'
-    logging.debug("Header: features:{} pos:{} wd:{} final:{}".format(len(header.split(',')),
-                                                                     len(pos_header.split(',')),
-                                                                     len(words_header.split(',')),
-                                                                     len(final_header.split(','))))
-    return final_header
+    headers = get_header() + ','
+    headers += generate_vector_headers(pos_vects, "pos")
+    headers += generate_vector_headers(rants_vects, "word")
+    headers += "target\n"
+    logging.debug("Header: {}".format(headers))
+    return headers
 
 
-def generate_pos_headers(pos_vect):
-    return ','.join(["pos" + str(i) for i in range(pos_vect.shape[1])])
-
-
-def generate_word_headers(word_vect):
-    if word_vect.shape[1] is 0:
+def generate_vector_headers(v, prefix):
+    if v.shape[1] is 0:
         return ""
-    return ','.join(["wd" + str(i) for i in range(word_vect.shape[1])])
+    return ','.join([prefix + str(i) for i in range(v.shape[1])]) + ','
