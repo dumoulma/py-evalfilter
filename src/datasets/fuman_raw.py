@@ -30,6 +30,23 @@ def load_rants(filepath):
         yield unicodedata.normalize('NFKC', row[5])
 
 
+def load_target_rants(filepath, target, target_var_func):
+    for row in FumanDataset(filepath):
+        if len(row) is not 16:
+            logging.debug("Badly formated row: {}".format(row))
+            continue
+        try:
+            int(row[1]), int(row[2]), int(row[3]), int(row[4]), int(row[6]), int(row[7]), int(row[8]), int(row[15])
+            price = int(row[15])
+            status = int(row[6])
+        except ValueError as ve:
+            logging.warning("Parse problem for rant {} ({})".format(row[0], ve))
+            continue
+        if target_var_func(status, price) is not target:
+            continue
+        yield unicodedata.normalize('NFKC', row[5])
+
+
 def load_fuman_csv(filepath, target_var_func=None) -> list:
     for i, row in enumerate(FumanDataset(filepath)):
         if len(row) is not 16:

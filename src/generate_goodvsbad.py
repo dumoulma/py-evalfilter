@@ -4,10 +4,11 @@ import logging
 import os
 import time
 import datetime
+import json
 
 import click
 
-from datasets.fuman_raw import load_fuman_csv, load_rants
+from datasets.fuman_raw import load_fuman_csv, load_rants, load_target_rants
 from datasets.csv_output import generate_header, make_csv_row
 from datasets.features import tfidf_word, tfidf_pos
 from util.mecab import tokenize_rant, tokenize_pos, STOPWORDS
@@ -15,6 +16,7 @@ from util.mecab import tokenize_rant, tokenize_pos, STOPWORDS
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
 ALLSCORED = 'all-scored-rants.csv'
+POS_NGRAM_RANGE = (1, 3)
 
 
 @click.command()
@@ -57,10 +59,11 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
     logging.info("Loading vectors for pos and words")
     word_vects = tfidf_word(load_rants(filepath=source_filepath), tokenize_rant, STOPWORDS, word_min_df,
                             word_max_features)
-    pos_vects = tfidf_pos(load_rants(filepath=source_filepath), tokenize_pos, (1, 3), pos_min_df, pos_max_features)
+    pos_vects = tfidf_pos(load_target_rants(filepath=source_filepath, target=1, target_var_func=set_goodvsbad_label),
+                          tokenize_pos, POS_NGRAM_RANGE, pos_min_df, pos_max_features)
 
     logging.info("Loading instances from CSV...")
-    instances = list(load_fuman_csv(source_filepath, target_var_func=set_goodvsbad_label))
+    instances = list(load_fuman_csv(source_filepath))
     good_indices = list(i for i, x in enumerate(instances) if x[-1] is -1)
     bad_indices = list(i for i, x in enumerate(instances) if x[-1] is 1)
     n_bad = len(bad_indices)
@@ -95,6 +98,20 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
         n = m + split * n_bad
         logging.info("Wrote {} instances (total: {})".format(split_end - split_start + n_bad, n))
         split += 1
+
+    dataset_meta = {
+        'timestamp': timestamp,
+        'word_max_features': str(word_max_features),
+        'pos_max_features': str(pos_max_features),
+        'word_min_df': str(word_min_df),
+        'pos_min_df': str(pos_min_df),
+        'pos_ngram_range': str(POS_NGRAM_RANGE),
+    }
+    metadata_output = os.path.join(output_path, "metadata-{}.json".format(timestamp))
+    with open(metadata_output, 'w', encoding='utf-8') as out:
+        out.write(json.dumps(dataset_meta))
+    logging.info("Metadata saved to {}".format(metadata_output))
+    logging.info("Work complete!")
 
 
 def set_goodvsbad_label(status, _):

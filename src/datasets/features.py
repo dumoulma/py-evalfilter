@@ -2,7 +2,7 @@ import logging
 import collections
 from functools import partial
 
-from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 import scipy.sparse as sp
 
 import unicodedata
@@ -130,6 +130,16 @@ def tfidf_pos(raw_documents, tokenizer, ngram_range, min_df, max_features):
     if max_features is 0:
         return sp.csr_matrix([])
     posvec = TfidfVectorizer(tokenizer=tokenizer, ngram_range=ngram_range, strip_accents='unicode', min_df=min_df,
+                             max_features=max_features)
+    pos_vects = posvec.fit_transform(raw_documents)
+    logging.info("POS vectorized: {}".format(pos_vects.shape))
+    return pos_vects
+
+
+def tf_pos(raw_documents, tokenizer, ngram_range, min_df, max_features):
+    if max_features is 0:
+        return sp.csr_matrix([])
+    posvec = CountVectorizer(tokenizer=tokenizer, ngram_range=ngram_range, strip_accents='unicode', min_df=min_df,
                              max_features=max_features)
     pos_vects = posvec.fit_transform(raw_documents)
     logging.info("POS vectorized: {}".format(pos_vects.shape))

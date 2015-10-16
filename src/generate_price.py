@@ -4,6 +4,7 @@ import logging
 import os
 import time
 import datetime
+import json
 
 import click
 
@@ -15,6 +16,7 @@ from util.mecab import tokenize_rant, tokenize_pos, STOPWORDS
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
 ALLSCORED = 'all-scored-rants.csv'
+POS_NGRAM_RANGE = (1, 3)
 
 
 @click.command()
@@ -54,7 +56,7 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
 
     logging.info("Loading vectors for pos and words")
     word_vects = tfidf_word(source_filepath, tokenize_rant, STOPWORDS, word_min_df, word_max_features)
-    pos_vects = tfidf_pos(source_filepath, tokenize_pos, (1, 3), pos_min_df, pos_max_features)
+    pos_vects = tfidf_pos(source_filepath, tokenize_pos, POS_NGRAM_RANGE, pos_min_df, pos_max_features)
 
     logging.info("Loading instances...")
     instances = list(load_fuman_csv(source_filepath, target_var_func=set_price))
@@ -78,6 +80,20 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
         logging.info("Wrote {} instances (total: {})".format(split_end - split_start, split_end))
         split_start = split_end
         split += 1
+
+    dataset_meta = {
+        'timestamp': timestamp,
+        'word_max_features': word_max_features,
+        'pos_max_features': pos_max_features,
+        'word_min_df': word_min_df,
+        'pos_min_df': pos_min_df,
+        'pos_ngram_range': POS_NGRAM_RANGE,
+    }
+    metadata_output = os.path.join(output_path, "metadata-{}.json".format(timestamp))
+    with open(metadata_output, 'w', encoding='utf-8') as out:
+        json.dump(out, dataset_meta)
+    logging.info("Metadata saved to {}".format(metadata_output))
+    logging.info("Work complete!")
 
 
 def set_price(_, price):
