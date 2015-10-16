@@ -10,7 +10,7 @@ import click
 
 from datasets.fuman_raw import load_fuman_csv
 from datasets.csv_output import generate_header, make_csv_row
-from datasets.features import tfidf_word, tfidf_pos
+from datasets.features import vectorize_words, vectorize_pos
 from util.mecab import tokenize_rant, tokenize_pos, STOPWORDS
 
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
@@ -55,8 +55,8 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
         source_filepath = os.path.join(source, ALLSCORED)
 
     logging.info("Loading vectors for pos and words")
-    word_vects = tfidf_word(source_filepath, tokenize_rant, STOPWORDS, word_min_df, word_max_features)
-    pos_vects = tfidf_pos(source_filepath, tokenize_pos, POS_NGRAM_RANGE, pos_min_df, pos_max_features)
+    word_vects = vectorize_words(source_filepath, tokenize_rant, STOPWORDS, word_min_df, word_max_features)
+    pos_vects = vectorize_pos(source_filepath, tokenize_pos, POS_NGRAM_RANGE, pos_min_df, pos_max_features)
 
     logging.info("Loading instances...")
     instances = list(load_fuman_csv(source_filepath, target_var_func=set_price))

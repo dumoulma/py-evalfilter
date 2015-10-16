@@ -8,15 +8,17 @@ import json
 
 import click
 
+from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
+
 from datasets.fuman_raw import load_fuman_csv, load_rants, load_target_rants
 from datasets.csv_output import generate_header, make_csv_row
-from datasets.features import tfidf_word, bad_pos_vects
+from datasets.features import vectorize_text, vectorise_text_fit
 from util.mecab import tokenize_rant, tokenize_pos, STOPWORDS
 
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
 ALLSCORED = 'all-scored-rants.csv'
-POS_NGRAM_RANGE = (1, 3)
+VECTORIZERS = {'tfidf': TfidfVectorizer, 'count': CountVectorizer}
 
 
 @click.command()
@@ -26,9 +28,14 @@ POS_NGRAM_RANGE = (1, 3)
 @click.option('--max_splits', default=2)
 @click.option('--word_max_features', default=5000)
 @click.option('--pos_max_features', default=5000)
+@click.option('--pos_bad_only', is_flag=True)
 @click.option('--word_min_df', default=100)
 @click.option('--pos_min_df', default=100)
-def main(source, output, split_size, max_splits, word_max_features, pos_max_features, word_min_df, pos_min_df):
+@click.option('--pos_ngram', default=3)
+@click.option('--word_vec', type=click.Choice(['tfidf', 'count']), default='tfidf')
+@click.option('--pos_vec', type=click.Choice(['tfidf', 'count']), default='count')
+def main(source, output, split_size, max_splits, word_max_features, pos_max_features, word_min_df, pos_min_df,
+         pos_bad_only, word_vec, pos_vec, pos_ngram):
     """
     Generates a good vs bad training dataset from Fuman user posts. Binary Classification.
 
@@ -55,26 +62,33 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
         source_filepath = source
     else:
         source_filepath = os.path.join(source, ALLSCORED)
-
+    pos_vec_func = vectorize_text
+    if pos_bad_only:
+        pos_vec_func = vectorise_text_fit
+    word_vectorizer = VECTORIZERS[word_vec]
+    pos_vectorizer = VECTORIZERS[pos_vec]
     logging.info("Loading vectors for pos and words")
-    word_vects = tfidf_word(load_rants(filepath=source_filepath), tokenize_rant, STOPWORDS, word_min_df,
-                            word_max_features)
-    pos_vects = bad_pos_vects(load_rants(filepath=source_filepath),
-                              load_target_rants(filepath=source_filepath, target=1,
-                                                target_var_func=set_goodvsbad_label),
-                              tokenize_pos, POS_NGRAM_RANGE, pos_min_df, pos_max_features)
-
-    assert word_vects.shape[0] == pos_vects.shape[0], \
-        "Word and Pos vector rows dont match! w:{} p:{}".format(word_vects.shape[0], pos_vects.shape[0])
+    word_vects = vectorize_text(load_rants(filepath=source_filepath), None, vectorizer=TfidfVectorizer,
+                                tokenizer=tokenize_rant, stop_words=STOPWORDS, min_df=word_min_df,
+                                max_features=word_max_features)
+    pos_vects = pos_vec_func(load_rants(filepath=source_filepath),
+                             load_target_rants(filepath=source_filepath, target=1,
+                                               target_var_func=set_goodvsbad_label),
+                             vectorizer=CountVectorizer, tokenizer=tokenize_pos, ngram_range=(1, pos_ngram),
+                             min_df=pos_min_df, max_features=pos_max_features)
+    if word_max_features is not 0 and pos_max_features is not 0:
+        assert word_vects.shape[0] == pos_vects.shape[0], \
+            "Word and Pos vector row counts dont match! w:{} p:{}".format(word_vects.shape[0], pos_vects.shape[0])
     logging.info("Loading instances from CSV...")
     instances = list(load_fuman_csv(source_filepath, target_var_func=set_goodvsbad_label))
     good_indices = list(i for i, x in enumerate(instances) if x[-1] is -1)
     bad_indices = list(i for i, x in enumerate(instances) if x[-1] is 1)
     n_bad = len(bad_indices)
     n_good = len(good_indices)
-    n_instances = pos_vects.shape[0]
-    assert n_instances == n_good + n_bad, \
-        "Number of instances don't match! csv: %r vec: %r" % (n_good + n_bad, n_instances)
+    n_instances = n_good + n_bad
+    if word_max_features is not 0:
+        assert word_vects.shape[0] == n_instances, \
+            "Instances and vector counts don't match! csv: %r vec: %r" % (n_instances, word_vects.shape[0])
     logging.info("OK! good:{} bad:{} total:{}".format(n_good, n_bad, n_instances))
 
     # output to CSV
@@ -109,11 +123,18 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
         'pos_max_features': str(pos_max_features),
         'word_min_df': str(word_min_df),
         'pos_min_df': str(pos_min_df),
-        'pos_ngram_range': str(POS_NGRAM_RANGE),
+        'pos_ngram': str(pos_ngram),
+        'word_tokenizer': tokenize_rant.__name__,
+        'pos_tokenizer': tokenize_pos.__name__,
+        'pos_vectorizer': pos_vectorizer.__name__,
+        'word_vectorizer': word_vectorizer.__name__,
+        'pos_vectorizer_func': pos_vec_func.__name__,
     }
     metadata_output = os.path.join(output_path, "metadata-{}.json".format(timestamp))
+    metadata_json = json.dumps(dataset_meta, indent=4, separators=(',', ': '))
+    logging.info(metadata_json)
     with open(metadata_output, 'w', encoding='utf-8') as out:
-        out.write(json.dumps(dataset_meta, indent=4, separators=(',', ': ')))
+        out.write(metadata_json)
     logging.info("Metadata saved to {}".format(metadata_output))
     logging.info("Work complete!")
 

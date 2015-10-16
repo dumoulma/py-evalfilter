@@ -2,7 +2,6 @@ import logging
 import collections
 from functools import partial
 
-from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 import scipy.sparse as sp
 
 import unicodedata
@@ -116,34 +115,24 @@ def token_counts(rant_tokens):
     return counts_
 
 
-def tfidf_word(raw_documents, tokenizer, stop_words, min_df, max_features):
+def vectorize_text(raw_documents, _, vectorizer, tokenizer, min_df, max_features, stop_words=None, ngram_range=(1, 1)):
     if max_features is 0:
         return sp.csr_matrix([])
-    wdvec = TfidfVectorizer(tokenizer=tokenizer, strip_accents='unicode', stop_words=stop_words, min_df=min_df,
-                            max_features=max_features)
-    word_vects = wdvec.fit_transform(raw_documents)
-    logging.info("Rants vectorized: {}".format(word_vects.shape))
-    return word_vects
-
-
-def tfidf_pos(raw_documents, tokenizer, ngram_range, min_df, max_features):
-    if max_features is 0:
-        return sp.csr_matrix([])
-    posvec = TfidfVectorizer(tokenizer=tokenizer, ngram_range=ngram_range, strip_accents='unicode', min_df=min_df,
-                             max_features=max_features)
+    posvec = vectorizer(tokenizer=tokenizer, ngram_range=ngram_range, stop_words=stop_words, strip_accents='unicode',
+                        min_df=min_df, max_features=max_features)
     pos_vects = posvec.fit_transform(raw_documents)
-    logging.info("POS vectorized: {}".format(pos_vects.shape))
+    logging.info("Vectorized: {}".format(pos_vects.shape))
     return pos_vects
 
 
-def bad_pos_vects(all_documents, bad_documents, tokenizer, ngram_range, min_df, max_features):
+def vectorise_text_fit(raw_documents, fit_documents, vectorizer, tokenizer, ngram_range, min_df, max_features):
     if max_features is 0:
         return sp.csr_matrix([])
-    posvec = CountVectorizer(tokenizer=tokenizer, ngram_range=ngram_range, strip_accents='unicode', min_df=min_df,
-                             max_features=max_features)
-    posvec.fit(bad_documents)
-    pos_vects = posvec.transform(all_documents)
-    logging.info("POS vectorized: {}".format(pos_vects.shape))
+    posvec = vectorizer(tokenizer=tokenizer, ngram_range=ngram_range, strip_accents='unicode', min_df=min_df,
+                        max_features=max_features)
+    posvec.fit(fit_documents)
+    pos_vects = posvec.transform(raw_documents)
+    logging.info("Vectorized (fit): {}".format(pos_vects.shape))
     return pos_vects
 
 
