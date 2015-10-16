@@ -10,7 +10,7 @@ import click
 from datasets.fuman_raw import load_fuman_csv
 from datasets.csv_output import generate_header, make_csv_row
 from datasets.features import tfidf_word, tfidf_pos
-from mecab import tokenize_rant, tokenize_pos, STOPWORDS
+from util.mecab import tokenize_rant, tokenize_pos, STOPWORDS
 
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 

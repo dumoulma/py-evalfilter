@@ -4,41 +4,51 @@ from functools import partial
 
 from sklearn.feature_extraction.text import TfidfVectorizer
 import scipy.sparse as sp
+
 import unicodedata
-from mecab import tokenize_rant
+from util.mecab import tokenize_rant
 
 KATAKANA = "KATAKANA"
 HIRAGANA = "HIRAGANA"
 KANJI = "CJK"
 ALPHA = "LATIN"
 DIGIT = "DIGIT"
-SYMBOL = {'!', '?'}
+MARKS = {'!', '?', '！', '？'}
+PUNCT = {'、', '。', '「', '」', '（', '）', '＆', 'ー', '-', '＃', '￥'}
 
 
 def get_header():
-    return "katacount,hiracount,kanjicount,alphacount,digitcount,symbolcount,totaltokens,1chartokens," + \
-           "2chartokens,3chartokens,4chartokens,5+chartokens,avgTokLength"
+    return "katacount,hiracount,kanjicount,alphacount,digitcount,markcount,punctcount,totaltokens,1chartokens," + \
+           "2chartokens,3chartokens,4chartokens,5+chartokens,avgTokenLength"
 
 
-def add_manual_features(x, rant):
+def rant_text_features(x, rant):
+    """
+    Creates a number of new features based on the characteristics of the post words and characters.
+
+    :param x: the raw row data for a post
+    :param rant: the post text
+    :return:
+    """
     x.append(count_unicode_chars(rant, KATAKANA))  # katacount
     x.append(count_unicode_chars(rant, HIRAGANA))  # hiracount
     x.append(count_unicode_chars(rant, KANJI))  # kanjicount
     x.append(count_unicode_chars(rant, ALPHA))  # alphacount
     x.append(count_unicode_chars(rant, DIGIT))  # digitcount
-    x.append(len(list(filter(is_symbol, rant))))  # symbolcount
-    counts_dict = token_counts(tokenize_rant(rant))
+    x.append(count_chars_in_set(rant, is_mark))  # markcount
+    x.append(count_chars_in_set(rant, is_punct))  # punctcount
+    counts_dict = token_counts(tokenize_rant(rant, min_length=1))
     total_tokens = sum(counts_dict.values())
     x.append(total_tokens)  # totaltokens (words)
     x.append(counts_dict[1])  # 1chartokens
     x.append(counts_dict[2])  # 2chartokens
     x.append(counts_dict[3])  # 3chartokens
     x.append(counts_dict[4])  # 4chartokens
+    x.append(counts_dict[5])  # 5+chartokens
     if total_tokens > 0:
-        x.append(sum(counts_dict.values()) / total_tokens)  # 5+chartokens
+        x.append(sum([k * v for k, v in counts_dict.items()]) / total_tokens)  # avgTokenLength
     else:
         x.append(0)
-    x.append(len(list(filter(lambda k: k >= 5, counts_dict.keys()))))  # avgTokLength
     return x
 
 
@@ -46,8 +56,12 @@ def is_digit(c):
     return unicodedata.name(c)[:len(DIGIT)] == DIGIT
 
 
-def is_symbol(c):
-    return c in SYMBOL
+def is_mark(c):
+    return c in MARKS
+
+
+def is_punct(c):
+    return c in PUNCT
 
 
 def is_katakana(c):
@@ -82,14 +96,21 @@ def is_unicode_name(name, c):
     return False
 
 
-def count_unicode_chars(rant, name):
-    return len(list(filter(partial(is_unicode_name, name), rant)))
+def count_unicode_chars(rant, charset_name):
+    return len(list(filter(partial(is_unicode_name, charset_name), rant)))
+
+
+def count_chars_in_set(rant, predicate_func):
+    return len(list(filter(lambda c: predicate_func(c), rant)))
 
 
 def token_counts(rant_tokens):
     counts_ = collections.defaultdict(int)
     for t in rant_tokens:
-        counts_[len(t)] += 1
+        count = len(t)
+        if count > 5:
+            count = 5
+        counts_[count] += 1
     if 0 in counts_:
         counts_.pop(0)
     return counts_

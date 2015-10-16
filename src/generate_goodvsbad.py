@@ -10,7 +10,7 @@ import click
 from datasets.fuman_raw import load_fuman_csv, load_rants
 from datasets.csv_output import generate_header, make_csv_row
 from datasets.features import tfidf_word, tfidf_pos
-from mecab import tokenize_rant, tokenize_pos, STOPWORDS
+from util.mecab import tokenize_rant, tokenize_pos, STOPWORDS
 
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
@@ -42,11 +42,13 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
     :param word_min_df: parameter for tf-idf vectorizer
     :param pos_min_df: parameter for tf-idf vectorizer
     """
+    if not os.path.isdir(output):
+        raise ValueError("Output must be a directory")
+
     timestamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d-%H_%M_%S')
-    if os.path.isdir(output):
-        output_path = os.path.join(output, timestamp)
-        if not os.path.exists(output_path):
-            os.makedirs(output_path)
+    output_path = os.path.join(output, timestamp)
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
     if os.path.isfile(source):
         source_filepath = source
     else:

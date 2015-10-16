@@ -6,6 +6,8 @@ import datasets.features as cf
 
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
+GENDER = {0: "unk", 1: 'male', 2: 'female'}
+
 
 def get_header():
     header = "hasIndustry,hasOccupation,hasCompany,hasProductName,hasProposal,empathies,"
@@ -45,7 +47,7 @@ def load_fuman_csv(filepath, target_var_func=None) -> list:
             x.append(row[12])  # state
             x.append(get_gender(row[13]))  # gender
             x.append(row[14])  # job
-            x = cf.add_manual_features(x, rant=unicodedata.normalize('NFKC', row[5]))
+            x = cf.rant_text_features(x, rant=unicodedata.normalize('NFKC', row[5]))
             status = int(row[6])
             price = int(row[15])
         except ValueError as ve:
@@ -64,13 +66,14 @@ def load_fuman_csv(filepath, target_var_func=None) -> list:
 
 def get_gender(field):
     if field == '''\\0''':
-        return 0
-    try:
-        g = int(field)
-    except ValueError as ve:
-        logging.warning("Can't parse gender, set to UNKNOWN (got: {})".format(ve))
-        return 0
-    return g
+        g = 0
+    else:
+        try:
+            g = int(field)
+        except ValueError as ve:
+            logging.warning("Can't parse gender, set to UNKNOWN (got: {})".format(ve))
+            g = 0
+    return GENDER[g]
 
 
 class FumanDataset(object):
