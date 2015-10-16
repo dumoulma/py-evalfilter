@@ -2,6 +2,8 @@ import logging
 import collections
 from functools import partial
 
+from sklearn.feature_extraction.text import TfidfVectorizer
+import scipy.sparse as sp
 import unicodedata
 from mecab import tokenize_rant
 
@@ -91,3 +93,47 @@ def token_counts(rant_tokens):
     if 0 in counts_:
         counts_.pop(0)
     return counts_
+
+
+def tfidf_word(raw_documents, tokenizer, stop_words, min_df, max_features):
+    if max_features is 0:
+        return sp.csr_matrix([])
+    wdvec = TfidfVectorizer(tokenizer=tokenizer, strip_accents='unicode', stop_words=stop_words, min_df=min_df,
+                            max_features=max_features)
+    word_vects = wdvec.fit_transform(raw_documents)
+    logging.info("Rants vectorized: {}".format(word_vects.shape))
+    return word_vects
+
+
+def tfidf_pos(raw_documents, tokenizer, ngram_range, min_df, max_features):
+    posvec = TfidfVectorizer(tokenizer=tokenizer, ngram_range=ngram_range, strip_accents='unicode', min_df=min_df,
+                             max_features=max_features)
+    pos_vects = posvec.fit_transform(raw_documents)
+    logging.info("POS vectorized: {}".format(pos_vects.shape))
+    return pos_vects
+
+
+def encode_categoricals(X):
+    """
+    Transforms the categorical string values into int (necessary for some algorithms that can't process strings).
+    :param X:
+    :return:
+    """
+    import sklearn.preprocessing as pp
+    age_enc = pp.LabelEncoder()
+    encoded_age = age_enc.fit_transform([x[6] for x in X])
+    state_enc = pp.LabelEncoder()
+    encoded_state = state_enc.fit_transform([x[7] for x in X])
+    job_enc = pp.LabelEncoder()
+    encoded_job = job_enc.fit_transform([x[9] for x in X])
+    for x, ea, es, ej in zip(X, encoded_age, encoded_state, encoded_job):
+        x[6] = ea
+        x[7] = es
+        x[9] = ej
+
+
+def categorical_to_binary(X):
+    import sklearn.preprocessing as pp
+    values = [len(set(x[6] for x in X)), len(set(x[6] for x in X)), len(set(x[6] for x in X))]
+    ohe = pp.OneHotEncoder(n_values=values, categorical_features=[6, 7, 9], sparse=False)
+    return ohe.fit_transform(X)

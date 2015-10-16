@@ -2,7 +2,7 @@ import logging
 import csv
 
 import unicodedata
-import datasets.computed_features as cf
+import datasets.features as cf
 
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
@@ -89,7 +89,7 @@ class FumanDataset(object):
         with open(self.file_path, newline='') as csvfile:
             reader = csv.reader(csvfile, delimiter=',', quotechar="'")
             headers = next(reader)  # skip headers
-            logging.info("Got headers: {}".format(headers))
+            logging.debug("Got headers: {}".format(headers))
             for row in reader:
                 yield row
 
