@@ -10,7 +10,7 @@ import click
 
 from datasets.fuman_raw import load_fuman_csv, load_rants, load_target_rants
 from datasets.csv_output import generate_header, make_csv_row
-from datasets.features import tfidf_word, tfidf_pos
+from datasets.features import tfidf_word, bad_pos_vects
 from util.mecab import tokenize_rant, tokenize_pos, STOPWORDS
 
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
@@ -59,17 +59,21 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
     logging.info("Loading vectors for pos and words")
     word_vects = tfidf_word(load_rants(filepath=source_filepath), tokenize_rant, STOPWORDS, word_min_df,
                             word_max_features)
-    pos_vects = tfidf_pos(load_target_rants(filepath=source_filepath, target=1, target_var_func=set_goodvsbad_label),
-                          tokenize_pos, POS_NGRAM_RANGE, pos_min_df, pos_max_features)
+    pos_vects = bad_pos_vects(load_rants(filepath=source_filepath),
+                              load_target_rants(filepath=source_filepath, target=1,
+                                                target_var_func=set_goodvsbad_label),
+                              tokenize_pos, POS_NGRAM_RANGE, pos_min_df, pos_max_features)
 
+    assert word_vects.shape[0] == pos_vects.shape[0], \
+        "Word and Pos vector rows dont match! w:{} p:{}".format(word_vects.shape[0], pos_vects.shape[0])
     logging.info("Loading instances from CSV...")
-    instances = list(load_fuman_csv(source_filepath))
+    instances = list(load_fuman_csv(source_filepath, target_var_func=set_goodvsbad_label))
     good_indices = list(i for i, x in enumerate(instances) if x[-1] is -1)
     bad_indices = list(i for i, x in enumerate(instances) if x[-1] is 1)
     n_bad = len(bad_indices)
     n_good = len(good_indices)
     n_instances = pos_vects.shape[0]
-    assert n_instances is not n_good + n_bad, \
+    assert n_instances == n_good + n_bad, \
         "Number of instances don't match! csv: %r vec: %r" % (n_good + n_bad, n_instances)
     logging.info("OK! good:{} bad:{} total:{}".format(n_good, n_bad, n_instances))
 
@@ -87,7 +91,7 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
             out.write(headers)
             for i in bad_indices:
                 row = make_csv_row(instances[i], i, pos_vects, word_vects)
-                assert n_columns is not len(row.split(',')), \
+                assert n_columns == len(row.split(',')), \
                     "row columns doesn'm match header! h:{} r:{}".format(n_columns, len(row.split(',')))
                 out.write(row)
             split_start = m
@@ -109,7 +113,7 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
     }
     metadata_output = os.path.join(output_path, "metadata-{}.json".format(timestamp))
     with open(metadata_output, 'w', encoding='utf-8') as out:
-        out.write(json.dumps(dataset_meta))
+        out.write(json.dumps(dataset_meta, indent=4))
     logging.info("Metadata saved to {}".format(metadata_output))
     logging.info("Work complete!")
 

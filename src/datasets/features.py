@@ -136,12 +136,13 @@ def tfidf_pos(raw_documents, tokenizer, ngram_range, min_df, max_features):
     return pos_vects
 
 
-def tf_pos(raw_documents, tokenizer, ngram_range, min_df, max_features):
+def bad_pos_vects(all_documents, bad_documents, tokenizer, ngram_range, min_df, max_features):
     if max_features is 0:
         return sp.csr_matrix([])
     posvec = CountVectorizer(tokenizer=tokenizer, ngram_range=ngram_range, strip_accents='unicode', min_df=min_df,
                              max_features=max_features)
-    pos_vects = posvec.fit_transform(raw_documents)
+    posvec.fit(bad_documents)
+    pos_vects = posvec.transform(all_documents)
     logging.info("POS vectorized: {}".format(pos_vects.shape))
     return pos_vects
 
