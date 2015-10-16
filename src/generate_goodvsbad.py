@@ -113,7 +113,7 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
     }
     metadata_output = os.path.join(output_path, "metadata-{}.json".format(timestamp))
     with open(metadata_output, 'w', encoding='utf-8') as out:
-        out.write(json.dumps(dataset_meta, indent=4))
+        out.write(json.dumps(dataset_meta, indent=4, separators=(',', ': ')))
     logging.info("Metadata saved to {}".format(metadata_output))
     logging.info("Work complete!")
 
