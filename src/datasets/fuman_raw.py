@@ -8,7 +8,7 @@ import datasets.features as cf
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
 GENDER = {0: "unk", 1: 'male', 2: 'female'}
-BINARY = {0: 'False', 1: 'True'}
+BOOLEAN = {0: 'False', 1: 'True'}
 
 
 def get_header():
@@ -111,7 +111,7 @@ def get_age(raw_age):
 
 
 def to_binary_categorical(raw_field):
-    return BINARY[int(raw_field)]
+    return BOOLEAN[int(raw_field)]
 
 
 class FumanDataset(object):
