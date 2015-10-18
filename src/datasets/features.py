@@ -3,7 +3,6 @@ import collections
 from functools import partial
 
 import scipy.sparse as sp
-import numpy as np
 
 import unicodedata
 from util.mecab import tokenize_rant
@@ -119,22 +118,22 @@ def token_counts(rant_tokens):
 def vectorize_text(raw_documents, _, vectorizer, tokenizer, min_df, max_features, stop_words=None, ngram_range=(1, 1)):
     if max_features is 0:
         return sp.csr_matrix([])
-    posvec = vectorizer(tokenizer=tokenizer, ngram_range=ngram_range, stop_words=stop_words, strip_accents='unicode',
-                        min_df=min_df, max_features=max_features)
-    pos_vects = posvec.fit_transform(raw_documents)
-    logging.info("Vectorized: {}".format(pos_vects.shape))
-    return pos_vects
+    vec = vectorizer(tokenizer=tokenizer, ngram_range=ngram_range, stop_words=stop_words, strip_accents='unicode',
+                     min_df=min_df, max_features=max_features)
+    transformed = vec.fit_transform(raw_documents)
+    logging.info("Vectorized: {}".format(transformed.shape))
+    return transformed
 
 
 def vectorise_text_fit(raw_documents, fit_documents, vectorizer, tokenizer, ngram_range, min_df, max_features):
     if max_features is 0:
         return sp.csr_matrix([])
-    posvec = vectorizer(tokenizer=tokenizer, ngram_range=ngram_range, strip_accents='unicode', min_df=min_df,
-                        max_features=max_features)
-    posvec.fit(fit_documents)
-    pos_vects = posvec.transform(raw_documents)
-    logging.info("Vectorized (fit): {}".format(pos_vects.shape))
-    return pos_vects
+    vec = vectorizer(tokenizer=tokenizer, ngram_range=ngram_range, strip_accents='unicode', min_df=min_df,
+                     max_features=max_features)
+    vec.fit(fit_documents)
+    transformed = vec.transform(raw_documents)
+    logging.info("Vectorized (fit): {}".format(transformed.shape))
+    return transformed
 
 
 def encode_categoricals(X):
