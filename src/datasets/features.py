@@ -3,6 +3,7 @@ import collections
 from functools import partial
 
 import scipy.sparse as sp
+import numpy as np
 
 import unicodedata
 from util.mecab import tokenize_rant
@@ -143,20 +144,28 @@ def encode_categoricals(X):
     :return:
     """
     import sklearn.preprocessing as pp
-    age_enc = pp.LabelEncoder()
-    encoded_age = age_enc.fit_transform([x[6] for x in X])
     state_enc = pp.LabelEncoder()
     encoded_state = state_enc.fit_transform([x[7] for x in X])
+    gender_enc = pp.LabelEncoder()
+    encoded_gender = gender_enc.fit_transform([x[8] for x in X])
     job_enc = pp.LabelEncoder()
     encoded_job = job_enc.fit_transform([x[9] for x in X])
-    for x, ea, es, ej in zip(X, encoded_age, encoded_state, encoded_job):
-        x[6] = ea
+    for x, es, eg, ej in zip(X, encoded_state, encoded_gender, encoded_job):
+        x[0] = 1 if x[0] is 'True' else 0
+        x[1] = 1 if x[1] is 'True' else 0
+        x[2] = 1 if x[2] is 'True' else 0
+        x[3] = 1 if x[3] is 'True' else 0
+        x[4] = 1 if x[4] is 'True' else 0
         x[7] = es
+        x[8] = eg
         x[9] = ej
+    return X
 
 
 def categorical_to_binary(X):
     import sklearn.preprocessing as pp
-    values = [len(set(x[6] for x in X)), len(set(x[6] for x in X)), len(set(x[6] for x in X))]
-    ohe = pp.OneHotEncoder(n_values=values, categorical_features=[6, 7, 9], sparse=False)
-    return ohe.fit_transform(X)
+    # b = {'True', 'False'}
+    # values = [b, b, b, b, b, len(set(x[7] for x in X)), len(set(x[8] for x in X)), len(set(x[9] for x in X))]
+    ohe = pp.OneHotEncoder(categorical_features=[0, 1, 2, 3, 4, 7, 8, 9], sparse=False)
+    ohe.fit(X)
+    return ohe.ztransform(X)

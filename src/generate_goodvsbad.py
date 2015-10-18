@@ -12,7 +12,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 
 from datasets.fuman_raw import load_fuman_csv, load_rants, load_target_rants
 from datasets.csv_output import generate_header, make_csv_row
-from datasets.features import vectorize_text, vectorise_text_fit
+from datasets.features import vectorize_text, vectorise_text_fit, encode_categoricals
 from util.mecab import tokenize_rant, tokenize_pos, STOPWORDS
 
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
@@ -34,8 +34,9 @@ VECTORIZERS = {'tfidf': TfidfVectorizer, 'count': CountVectorizer}
 @click.option('--pos_ngram', default=3)
 @click.option('--word_vec', type=click.Choice(['tfidf', 'count']), default='tfidf')
 @click.option('--pos_vec', type=click.Choice(['tfidf', 'count']), default='count')
+@click.option('--encode', is_flag=True)
 def main(source, output, split_size, max_splits, word_max_features, pos_max_features, word_min_df, pos_min_df,
-         pos_bad_only, word_vec, pos_vec, pos_ngram):
+         pos_bad_only, word_vec, pos_vec, pos_ngram, encode):
     """
     Generates a good vs bad training dataset from Fuman user posts. Binary Classification.
 
@@ -81,6 +82,8 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
             "Word and Pos vector row counts dont match! w:{} p:{}".format(word_vects.shape[0], pos_vects.shape[0])
     logging.info("Loading instances from CSV...")
     instances = list(load_fuman_csv(source_filepath, target_var_func=set_goodvsbad_label))
+    if encode:
+        instances = encode_categoricals(instances)
     good_indices = list(i for i, x in enumerate(instances) if x[-1] is -1)
     bad_indices = list(i for i, x in enumerate(instances) if x[-1] is 1)
     n_bad = len(bad_indices)
@@ -95,13 +98,15 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
     split = 1
     n = 0
     m = 0
+    headers = generate_header(pos_vects, word_vects)
+    n_columns = len(headers.split(','))
+    logging.info("Final dataset: {} instances {} features".format(n_instances, n_columns))
     while split <= max_splits and n < n_instances:
         output_filename = os.path.join(output_path, "{}-{}-{}.csv".format("goodvsbad", timestamp, split))
         logging.info("Writing to: " + output_filename)
         split_end = min(n_good, n + split_size - split * n_bad)
         with open(output_filename, 'w', encoding='utf-8') as out:
-            headers = generate_header(pos_vects, word_vects)
-            n_columns = len(headers.split(','))
+
             out.write(headers)
             for i in bad_indices:
                 row = make_csv_row(instances[i], i, pos_vects, word_vects)
@@ -119,6 +124,7 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
 
     dataset_meta = {
         'timestamp': timestamp,
+        'input': str(source_filepath),
         'word_max_features': str(word_max_features),
         'pos_max_features': str(pos_max_features),
         'word_min_df': str(word_min_df),
@@ -130,6 +136,9 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
         'word_vectorizer': word_vectorizer.__name__,
         'pos_vectorizer_func': pos_vec_func.__name__,
     }
+    if encode:
+        dataset_meta['encode_categoricals'] = 'True'
+
     metadata_output = os.path.join(output_path, "metadata-{}.json".format(timestamp))
     metadata_json = json.dumps(dataset_meta, indent=4, separators=(',', ': '))
     logging.info(metadata_json)
