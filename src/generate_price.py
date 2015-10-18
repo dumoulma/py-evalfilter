@@ -4,7 +4,6 @@ import logging
 import os
 import time
 import datetime
-
 import json
 
 import click
@@ -47,7 +46,7 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
 
     :param source: directory or file of the input files. (If dir, file will be all-scored-rants.csv)
     :param output: the output directory
-    :param split_size: the size (in instances) of each split of the data
+    :param split_size: the size (in instances) of each n_splits of the data
     :param max_splits: the number of splits to generate
     :param word_max_features: parameter for tf-idf vectorizer
     :param pos_max_features: parameter for tf-idf vectorizer
@@ -93,27 +92,34 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
     logging.info("OK! total:{}".format(n_instances))
 
     # output to CSV
-    split = 1
-    n = 0
-    m = 0
+    n_splits = 1
+    split_start = 0
     headers = generate_header(pos_vects, word_vects)
     n_columns = len(headers.split(','))
     logging.info("Final dataset: {} instances {} features".format(n_instances, n_columns))
-    while split <= max_splits and n < n_instances:
-        output_filename = os.path.join(output_path, "{}-{}-{}.csv".format("price", timestamp, split))
+    while n_splits <= max_splits and split_start < n_instances:
+        output_filename = os.path.join(output_path, "{}-{}-{}.csv".format("price", timestamp, n_splits))
         logging.info("Writing to: " + output_filename)
-        split_end = min(n_instances, n + split_size)
+
+        split_end = min(n_instances, split_start + split_size)
         with open(output_filename, 'w', encoding='utf-8') as out:
-            split_start = m
+            out.write(headers)
             for i in range(split_start, split_end):
                 row = make_csv_row(instances[i], i, pos_vects, word_vects)
                 out.write(row)
-                m += 1
-        n = n + split_end
         logging.info(
-            "Wrote {} instances (total: {}) size:{} MB".format(split_end - split_start, n, get_size(output_filename)))
-        split += 1
+            "Wrote {} instances (total: {}) size:{} MB".format(split_end - split_start, split_end,
+                                                               get_size(output_filename)))
+        split_start = split_end
+        n_splits += 1
 
+    save_dataset_metadata(encode, output_path, pos_max_features, pos_min_df, pos_ngram, pos_vec_func, pos_vectorizer,
+                          source_filepath, timestamp, word_max_features, word_min_df, word_vectorizer)
+    logging.info("Work complete!")
+
+
+def save_dataset_metadata(encode, output_path, pos_max_features, pos_min_df, pos_ngram, pos_vec_func, pos_vectorizer,
+                          source_filepath, timestamp, word_max_features, word_min_df, word_vectorizer):
     dataset_meta = {
         'timestamp': timestamp,
         'dataset': "price",
@@ -131,14 +137,12 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
     }
     if encode:
         dataset_meta['encode_categoricals'] = 'True'
-
     metadata_output = os.path.join(output_path, "metadata-{}.json".format(timestamp))
     metadata_json = json.dumps(dataset_meta, indent=4, separators=(',', ': '))
     logging.info(metadata_json)
     with open(metadata_output, 'w', encoding='utf-8') as out:
         out.write(metadata_json)
     logging.info("Metadata saved to {}".format(metadata_output))
-    logging.info("Work complete!")
 
 
 def set_price(_, price):
