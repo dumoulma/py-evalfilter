@@ -4,6 +4,7 @@ import logging
 import os
 import time
 import datetime
+
 import json
 
 import click
@@ -14,6 +15,7 @@ from datasets.fuman_raw import load_fuman_csv, load_rants, load_target_rants
 from datasets.csv_output import generate_header, make_csv_row
 from datasets.features import vectorize_text, vectorise_text_fit, encode_categoricals
 from util.mecab import tokenize_rant, tokenize_pos, STOPWORDS
+from util.file import get_size
 
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
@@ -56,7 +58,7 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
         raise ValueError("Output must be a directory")
 
     timestamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d-%H_%M_%S')
-    output_path = os.path.join(output, timestamp)
+    output_path = os.path.join(output, "gvb-" + timestamp)
     if not os.path.exists(output_path):
         os.makedirs(output_path)
     if os.path.isfile(source):
@@ -119,11 +121,13 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
                 out.write(row)
                 m += 1
         n = m + split * n_bad
-        logging.info("Wrote {} instances (total: {})".format(split_end - split_start + n_bad, n))
+        logging.info("Wrote {} instances (total: {}) size:{} MB".format(split_end - split_start + n_bad, n,
+                                                                        get_size(output_filename)))
         split += 1
 
     dataset_meta = {
         'timestamp': timestamp,
+        'dataset': "goodvsbad",
         'input': str(source_filepath),
         'word_max_features': str(word_max_features),
         'pos_max_features': str(pos_max_features),
