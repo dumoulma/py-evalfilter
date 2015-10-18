@@ -108,7 +108,6 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
         logging.info("Writing to: " + output_filename)
         split_end = min(n_good, n + split_size - split * n_bad)
         with open(output_filename, 'w', encoding='utf-8') as out:
-
             out.write(headers)
             for i in bad_indices:
                 row = make_csv_row(instances[i], i, pos_vects, word_vects)
@@ -125,6 +124,13 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
                                                                         get_size(output_filename)))
         split += 1
 
+    save_dataset_metadata(encode, output_path, pos_max_features, pos_min_df, pos_ngram, pos_vec_func, pos_vectorizer,
+                          source_filepath, timestamp, word_max_features, word_min_df, word_vectorizer)
+    logging.info("Work complete!")
+
+
+def save_dataset_metadata(encode, output_path, pos_max_features, pos_min_df, pos_ngram, pos_vec_func, pos_vectorizer,
+                          source_filepath, timestamp, word_max_features, word_min_df, word_vectorizer):
     dataset_meta = {
         'timestamp': timestamp,
         'dataset': "goodvsbad",
@@ -142,14 +148,12 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
     }
     if encode:
         dataset_meta['encode_categoricals'] = 'True'
-
     metadata_output = os.path.join(output_path, "metadata-{}.json".format(timestamp))
     metadata_json = json.dumps(dataset_meta, indent=4, separators=(',', ': '))
     logging.info(metadata_json)
     with open(metadata_output, 'w', encoding='utf-8') as out:
         out.write(metadata_json)
     logging.info("Metadata saved to {}".format(metadata_output))
-    logging.info("Work complete!")
 
 
 def set_goodvsbad_label(status, _):
