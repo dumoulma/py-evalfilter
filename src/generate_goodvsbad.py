@@ -4,6 +4,7 @@ import logging
 import os
 import time
 import datetime
+import random
 
 import click
 
@@ -94,6 +95,11 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
         instances = encode_categoricals(instances)
     good_indices = list(i for i, x in enumerate(instances) if x[-1] is -1)
     bad_indices = list(i for i, x in enumerate(instances) if x[-1] is 1)
+
+    #makes the data I.I.D.
+    random.shuffle(good_indices)
+    random.shuffle(bad_indices)
+    
     n_bad = len(bad_indices)
     n_good = len(good_indices)
     n_instances = n_good + n_bad
@@ -105,17 +111,16 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
     # output to CSV
     split = 1
     n = 0
-    m = 0
     headers = generate_header(pos_vects, word_vects)
     n_columns = len(headers.split(','))
     logging.info("Final dataset: {} instances {} features".format(n_instances, n_columns))
     while split <= max_splits and n < n_instances:
         output_filename = os.path.join(output_path, "{}-{}-{}.csv".format("goodvsbad", timestamp, split))
         logging.info("Writing to: " + output_filename)
-        split_end = min(n_good, n + split_size - split * n_bad)
         with open(output_filename, 'w', encoding='utf-8') as out:
             if not svmlight:
                 out.write(headers)
+            write_count = 0
             for i in bad_indices:
                 if svmlight:
                     row = make_svmlight_row(instances[i][:-1], instances[i][-1], i, pos_vects, word_vects)
@@ -124,17 +129,18 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
                     assert n_columns == len(row.split(',')), \
                         "row columns doesn'm match header! h:{} r:{}".format(n_columns, len(row.split(',')))
                 out.write(row)
-            split_start = m
-            for i in range(split_start, split_end):
+            write_count += n_bad
+            n += n_bad
+            while len(good_indices) is not 0 and write_count < split_size:
+                i = good_indices.pop()
                 if svmlight:
                     row = make_svmlight_row(instances[i][:-1], instances[i][-1], i, pos_vects, word_vects)
                 else:
                     row = make_csv_row(instances[i], i, pos_vects, word_vects)
                 out.write(row)
-                m += 1
-        n = m + split * n_bad
-        logging.info("Wrote {} instances (total: {}) size:{} MB".format(split_end - split_start + n_bad, n,
-                                                                        get_size(output_filename)))
+                n += 1
+                write_count += 1
+        logging.info("Wrote {} instances (total: {}) size:{} MB".format(write_count, n, get_size(output_filename)))
         split += 1
 
     save_dataset_metadata(encode, output_path, "goodvsbad", pos_max_features, pos_min_df, pos_ngram, pos_vec_func,
