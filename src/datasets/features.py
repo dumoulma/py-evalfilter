@@ -121,7 +121,7 @@ def vectorize_text(raw_documents, _, vectorizer, tokenizer, min_df, max_features
     vec = vectorizer(tokenizer=tokenizer, ngram_range=ngram_range, stop_words=stop_words, strip_accents='unicode',
                      min_df=min_df, max_features=max_features)
     transformed = vec.fit_transform(raw_documents)
-    logging.info("Vectorized: {}".format(transformed.shape))
+    logging.info("Vectorized: {} ({})".format(transformed.shape, tokenizer.__name__))
     return transformed
 
 

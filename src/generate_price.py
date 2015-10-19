@@ -4,14 +4,13 @@ import logging
 import os
 import time
 import datetime
-import json
 
 import click
 
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 
 from datasets.fuman_raw import load_fuman_csv, load_rants, load_target_rants
-from datasets.csv_output import generate_header, make_csv_row
+from datasets.csv_output import generate_header, make_csv_row, save_dataset_metadata
 from datasets.features import vectorize_text, vectorise_text_fit, encode_categoricals
 from util.mecab import tokenize_rant, tokenize_pos, STOPWORDS
 from util.file import get_size
@@ -39,7 +38,7 @@ VECTORIZERS = {'tfidf': TfidfVectorizer, 'count': CountVectorizer}
 def main(source, output, split_size, max_splits, word_max_features, pos_max_features, word_min_df, pos_min_df,
          pos_bad_only, word_vec, pos_vec, pos_ngram, encode):
     """
-    Generates a good vs bad training dataset from Fuman user posts. Binary Classification.
+    Generates a price estimation training dataset from Fuman user posts. (Regression)
 
     Concatenates simple features from the database, hand crafted features based on various character and word counts,
     and Tf-Idf weighted bag of words based on the text as well as the part-of-speech tags of Fuman user posts.
@@ -48,11 +47,17 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
     :param output: the output directory
     :param split_size: the size (in instances) of each n_splits of the data
     :param max_splits: the number of splits to generate
-    :param word_max_features: parameter for tf-idf vectorizer
-    :param pos_max_features: parameter for tf-idf vectorizer
-    :param word_min_df: parameter for tf-idf vectorizer
-    :param pos_min_df: parameter for tf-idf vectorizer
+    :param word_max_features: parameter for tf-idf vectorizer (default 50000)
+    :param pos_max_features: parameter for tf-idf vectorizer (default 50000)
+    :param word_min_df: parameter for tf-idf vectorizer (default 100)
+    :param pos_min_df: parameter for tf-idf vectorizer (default 100)
+    :param pos_bad_only: learn vocabulary for POS from bad rants only (flag, default is all dataset)
+    :param word_vec: [tfidf, count] use corresponding term weighting
+    :param pos_vec: [tfidf, count] use corresponding term weighting
+    :param pos_ngram: Learn vocabulary with ngrams in range (1,pos_ngram) (default is 3)
+    :param encode:
     """
+
     if not os.path.isdir(output):
         raise ValueError("Output must be a directory")
 
@@ -113,36 +118,10 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
         split_start = split_end
         n_splits += 1
 
-    save_dataset_metadata(encode, output_path, pos_max_features, pos_min_df, pos_ngram, pos_vec_func, pos_vectorizer,
-                          source_filepath, timestamp, word_max_features, word_min_df, word_vectorizer)
+    save_dataset_metadata(encode, output_path, "price", pos_max_features, pos_min_df, pos_ngram, pos_vec_func,
+                          pos_vectorizer, source_filepath, timestamp, word_max_features, word_min_df, word_vectorizer,
+                          tokenize_rant, tokenize_pos)
     logging.info("Work complete!")
-
-
-def save_dataset_metadata(encode, output_path, pos_max_features, pos_min_df, pos_ngram, pos_vec_func, pos_vectorizer,
-                          source_filepath, timestamp, word_max_features, word_min_df, word_vectorizer):
-    dataset_meta = {
-        'timestamp': timestamp,
-        'dataset': "price",
-        'input': str(source_filepath),
-        'word_max_features': str(word_max_features),
-        'pos_max_features': str(pos_max_features),
-        'word_min_df': str(word_min_df),
-        'pos_min_df': str(pos_min_df),
-        'pos_ngram': str(pos_ngram),
-        'word_tokenizer': tokenize_rant.__name__,
-        'pos_tokenizer': tokenize_pos.__name__,
-        'pos_vectorizer': pos_vectorizer.__name__,
-        'word_vectorizer': word_vectorizer.__name__,
-        'pos_vectorizer_func': pos_vec_func.__name__,
-    }
-    if encode:
-        dataset_meta['encode_categoricals'] = 'True'
-    metadata_output = os.path.join(output_path, "metadata-{}.json".format(timestamp))
-    metadata_json = json.dumps(dataset_meta, indent=4, separators=(',', ': '))
-    logging.info(metadata_json)
-    with open(metadata_output, 'w', encoding='utf-8') as out:
-        out.write(metadata_json)
-    logging.info("Metadata saved to {}".format(metadata_output))
 
 
 def set_price(_, price):
