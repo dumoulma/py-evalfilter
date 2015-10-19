@@ -23,9 +23,7 @@ def make_csv_row(x, i, pos_vects, rants_vects) -> str:
 
 
 def make_svmlight_row(x, y, i, pos_vects, rants_vects) -> str:
-    new_line = []
-    if float(y) == 0.0:
-        y = "0"
+    new_line = list()
     new_line.append(str(y))
 
     x_line = list_to_svmlight(x, 0)

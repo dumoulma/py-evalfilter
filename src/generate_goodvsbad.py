@@ -126,7 +126,10 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
                 out.write(row)
             split_start = m
             for i in range(split_start, split_end):
-                row = make_csv_row(instances[good_indices[i]], i, pos_vects, word_vects)
+                if svmlight:
+                    row = make_svmlight_row(instances[i][:-1], instances[i][-1], i, pos_vects, word_vects)
+                else:
+                    row = make_csv_row(instances[i], i, pos_vects, word_vects)
                 out.write(row)
                 m += 1
         n = m + split * n_bad
