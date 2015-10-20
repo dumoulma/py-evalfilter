@@ -5,6 +5,7 @@ import os
 import time
 import datetime
 import random
+import json
 
 import click
 
@@ -61,31 +62,40 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
     """
     if not os.path.isdir(output):
         raise ValueError("Output must be a directory")
+    if svmlight and not encode:
+        raise ValueError("smlight option set, but encode option not set!")
 
-    timestamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d-%H_%M_%S')
-    output_path = os.path.join(output, "gvb-" + timestamp)
-    if not os.path.exists(output_path):
-        os.makedirs(output_path)
     if os.path.isfile(source):
         source_filepath = source
     else:
         source_filepath = os.path.join(source, ALLSCORED)
+    timestamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d-%H_%M_%S')
+    output_path = os.path.join(output, "gvb-" + timestamp)
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+
     pos_vec_func = vectorize_text
     if pos_bad_only:
         pos_vec_func = vectorise_text_fit
-    if svmlight and not encode:
-        raise ValueError("smlight option set, but encode option not set!")
     word_vectorizer = VECTORIZERS[word_vec]
     pos_vectorizer = VECTORIZERS[pos_vec]
+    word_dict_filename = os.path.join(output_path, "word-vocabulary-" + timestamp + ".json")
+    pos_dict_filename = os.path.join(output_path, "pos-vocabulary-" + timestamp + ".json")
+
     logging.info("Loading vectors for pos and words")
-    word_vects = vectorize_text(load_rants(filepath=source_filepath), None, vectorizer=TfidfVectorizer,
-                                tokenizer=tokenize_rant, stop_words=STOPWORDS, min_df=word_min_df,
-                                max_features=word_max_features)
-    pos_vects = pos_vec_func(load_rants(filepath=source_filepath),
-                             load_target_rants(filepath=source_filepath, target=1,
-                                               target_var_func=set_goodvsbad_label),
-                             vectorizer=CountVectorizer, tokenizer=tokenize_pos, ngram_range=(1, pos_ngram),
-                             min_df=pos_min_df, max_features=pos_max_features)
+    word_vects, word_features = vectorize_text(load_rants(filepath=source_filepath), None, vectorizer=TfidfVectorizer,
+                                               tokenizer=tokenize_rant, stop_words=STOPWORDS, min_df=word_min_df,
+                                               max_features=word_max_features)
+    pos_vects, pos_features = pos_vec_func(load_rants(filepath=source_filepath),
+                                           load_target_rants(filepath=source_filepath, target=1,
+                                                             target_var_func=set_goodvsbad_label),
+                                           vectorizer=CountVectorizer, tokenizer=tokenize_pos,
+                                           ngram_range=(1, pos_ngram),
+                                           min_df=pos_min_df, max_features=pos_max_features)
+
+    save_features_json(word_dict_filename, word_features)
+    save_features_json(pos_dict_filename, pos_features)
+
     if word_max_features is not 0 and pos_max_features is not 0:
         assert word_vects.shape[0] == pos_vects.shape[0], \
             "Word and Pos vector row counts dont match! w:{} p:{}".format(word_vects.shape[0], pos_vects.shape[0])
@@ -96,10 +106,10 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
     good_indices = list(i for i, x in enumerate(instances) if x[-1] is -1)
     bad_indices = list(i for i, x in enumerate(instances) if x[-1] is 1)
 
-    #makes the data I.I.D.
+    # makes the data I.I.D.
     random.shuffle(good_indices)
     random.shuffle(bad_indices)
-    
+
     n_bad = len(bad_indices)
     n_good = len(good_indices)
     n_instances = n_good + n_bad
@@ -111,7 +121,7 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
     # output to CSV
     split = 1
     n = 0
-    headers = generate_header(pos_vects, word_vects)
+    headers = generate_header(pos_features, word_features)
     n_columns = len(headers.split(','))
     logging.info("Final dataset: {} instances {} features".format(n_instances, n_columns))
     while split <= max_splits and n < n_instances:
@@ -147,6 +157,14 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
                           pos_vectorizer, source_filepath, timestamp, word_max_features, word_min_df, word_vectorizer,
                           tokenize_rant, tokenize_pos)
     logging.info("Work complete!")
+
+
+def save_features_json(filepath, feature_names):
+    if not feature_names:
+        return
+    with open(filepath, mode='w') as out:
+        out.write(json.dumps(feature_names, ensure_ascii=False, indent=4, separators=(',', ':')))
+        logging.info("Saved features to: {}".format(filepath))
 
 
 def set_goodvsbad_label(status, _):

@@ -1,6 +1,7 @@
 import logging
 import collections
 from functools import partial
+import json
 
 import scipy.sparse as sp
 
@@ -115,14 +116,15 @@ def token_counts(rant_tokens):
     return counts_
 
 
-def vectorize_text(raw_documents, _, vectorizer, tokenizer, min_df, max_features, stop_words=None, ngram_range=(1, 1)):
+def vectorize_text(raw_documents, _, vectorizer, tokenizer, min_df, max_features, stop_words=None, ngram_range=(1, 1),
+                   dict_filename=None):
     if max_features is 0:
-        return sp.csr_matrix([])
+        return sp.csr_matrix([]), []
     vec = vectorizer(tokenizer=tokenizer, ngram_range=ngram_range, stop_words=stop_words, strip_accents='unicode',
                      min_df=min_df, max_features=max_features)
     transformed = vec.fit_transform(raw_documents)
     logging.info("Vectorized: {} ({})".format(transformed.shape, tokenizer.__name__))
-    return transformed
+    return transformed, vec.get_feature_names()
 
 
 def vectorise_text_fit(raw_documents, fit_documents, vectorizer, tokenizer, ngram_range, min_df, max_features):

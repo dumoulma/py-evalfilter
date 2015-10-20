@@ -67,11 +67,13 @@ def sparse_to_svlight(vector, start_index):
     return items
 
 
-def generate_header(pos_vects, rants_vects):
-    headers = get_header() + ','
-    headers += generate_vector_headers(pos_vects, "pos")
-    headers += generate_vector_headers(rants_vects, "word")
-    headers += "target\n"
+def generate_header(pos_features, word_features):
+    headers = get_header()
+    if len(pos_features):
+        headers += ',' + ','.join(pos_features)
+    if len(word_features):
+        headers += ',' + ','.join(word_features)
+    headers += ",target\n"
     logging.debug("Header: {}".format(headers))
     return headers
 
