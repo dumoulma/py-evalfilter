@@ -2,8 +2,6 @@ import logging
 import json
 import os
 
-from datasets.fuman_raw import get_header
-
 
 def make_csv_row(x, i, pos_vects, rants_vects) -> str:
     features = ','.join(str(i) for i in x[:-1]) + ','
@@ -67,13 +65,28 @@ def sparse_to_svlight(vector, start_index):
     return items
 
 
-def generate_header(pos_features, word_features):
-    headers = get_header()
+def vector_headers(pos_features, word_features, simple=True):
+    """
+    Given an existing CSV string of headers, will concatenate the headers for
+    the features from the pos and word features.
+
+    :param headers: the current headers as a comma separated list of column names
+    :param pos_features: the list of features of the pos vector (i.e. the vocabulary of the pos vectorizer)
+    :param word_features: the list of features of the word vector (i.e. the vocabulary of the word vectorizer)
+    :param simple: if True, features will be ['pos_','word_'] + N. if False, features are used as headers
+    :return: the updated header list as a string
+    """
+    headers = ''
+    pos_headers = pos_features
+    word_headers = word_features
+
+    if simple:
+        pos_headers = ["pos_" + str(i) for i in range(len(pos_features))]
+        word_headers = ["word_" + str(i) for i in range(len(word_features))]
     if len(pos_features):
-        headers += ',' + ','.join(pos_features)
+        headers += ',' + ','.join(pos_headers)
     if len(word_features):
-        headers += ',' + ','.join(word_features)
-    headers += ",target\n"
+        headers += ',' + ','.join(word_headers)
     logging.debug("Header: {}".format(headers))
     return headers
 

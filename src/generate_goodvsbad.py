@@ -11,8 +11,9 @@ import click
 
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 
-from datasets.fuman_raw import load_fuman_csv, load_rants, load_target_rants
-from datasets.csv_output import generate_header, make_csv_row, save_dataset_metadata, make_svmlight_row
+from datasets.fuman_raw import load_fuman_csv, load_rants, load_target_rants, manual_features_header
+from datasets.csv_output import vector_headers, make_csv_row, save_dataset_metadata, \
+    make_svmlight_row
 from datasets.features import vectorize_text, vectorise_text_fit, encode_categoricals
 from util.mecab import tokenize_rant, tokenize_pos, STOPWORDS
 from util.file import get_size
@@ -38,8 +39,9 @@ VECTORIZERS = {'tfidf': TfidfVectorizer, 'count': CountVectorizer}
 @click.option('--pos_vec', type=click.Choice(['tfidf', 'count']), default='count')
 @click.option('--encode', is_flag=True)
 @click.option('--svmlight', is_flag=True)
+@click.option('--simple_headers', is_flag=True)
 def main(source, output, split_size, max_splits, word_max_features, pos_max_features, word_min_df, pos_min_df,
-         pos_bad_only, word_vec, pos_vec, pos_ngram, encode, svmlight):
+         pos_bad_only, word_vec, pos_vec, pos_ngram, encode, svmlight, simple_headers):
     """
     Generates a good vs bad training dataset from Fuman user posts. (Binary Classification)
 
@@ -69,7 +71,9 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
         source_filepath = source
     else:
         source_filepath = os.path.join(source, ALLSCORED)
+    logging.info("Source dump: {}".format(source_filepath))
     timestamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d-%H_%M_%S')
+    logging.info("Timestamp: {}".format(timestamp))
     output_path = os.path.join(output, "gvb-" + timestamp)
     if not os.path.exists(output_path):
         os.makedirs(output_path)
@@ -103,13 +107,22 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
     instances = list(load_fuman_csv(source_filepath, target_var_func=set_goodvsbad_label))
     if encode:
         instances = encode_categoricals(instances)
+    write_dataset(instances, max_splits, output_path, pos_features, pos_vects, simple_headers, split_size, svmlight,
+                  timestamp, word_features, word_max_features, word_vects)
+
+    save_dataset_metadata(encode, output_path, "goodvsbad", pos_max_features, pos_min_df, pos_ngram, pos_vec_func,
+                          pos_vectorizer, source_filepath, timestamp, word_max_features, word_min_df, word_vectorizer,
+                          tokenize_rant, tokenize_pos)
+    logging.info("Work complete!")
+
+
+def write_dataset(instances, max_splits, output_path, pos_features, pos_vects, simple_headers, split_size, svmlight,
+                  timestamp, word_features, word_max_features, word_vects):
     good_indices = list(i for i, x in enumerate(instances) if x[-1] is -1)
     bad_indices = list(i for i, x in enumerate(instances) if x[-1] is 1)
-
     # makes the data I.I.D.
     random.shuffle(good_indices)
     random.shuffle(bad_indices)
-
     n_bad = len(bad_indices)
     n_good = len(good_indices)
     n_instances = n_good + n_bad
@@ -117,46 +130,47 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
         assert word_vects.shape[0] == n_instances, \
             "Instances and vector counts don't match! csv: %r vec: %r" % (n_instances, word_vects.shape[0])
     logging.info("OK! good:{} bad:{} total:{}".format(n_good, n_bad, n_instances))
-
     # output to CSV
     split = 1
-    n = 0
-    headers = generate_header(pos_features, word_features)
+    n_written = 0
+    headers = manual_features_header()
+    headers += vector_headers(pos_features, word_features, simple=simple_headers)
+    headers += ",target\n"
     n_columns = len(headers.split(','))
     logging.info("Final dataset: {} instances {} features".format(n_instances, n_columns))
-    while split <= max_splits and n < n_instances:
+    while split <= max_splits and n_written < n_instances:
+        logging.debug("split {} max_splits {} n_written {} n_instances {}".format(split, max_splits,
+                                                                                  n_written, n_instances))
         output_filename = os.path.join(output_path, "{}-{}-{}.csv".format("goodvsbad", timestamp, split))
         logging.info("Writing to: " + output_filename)
         with open(output_filename, 'w', encoding='utf-8') as out:
             if not svmlight:
                 out.write(headers)
-            write_count = 0
             for i in bad_indices:
-                if svmlight:
-                    row = make_svmlight_row(instances[i][:-1], instances[i][-1], i, pos_vects, word_vects)
-                else:
-                    row = make_csv_row(instances[i], i, pos_vects, word_vects)
-                    assert n_columns == len(row.split(',')), \
-                        "row columns doesn'm match header! h:{} r:{}".format(n_columns, len(row.split(',')))
+                row = next_row(i, instances, n_columns, pos_vects, word_vects, svmlight)
                 out.write(row)
-            write_count += n_bad
-            n += n_bad
-            while len(good_indices) is not 0 and write_count < split_size:
+            n_written += n_bad
+            logging.debug("split: {} after bad: {} written".format(split, n_written))
+            while len(good_indices) is not 0 and n_written % split_size is not 0:
                 i = good_indices.pop()
-                if svmlight:
-                    row = make_svmlight_row(instances[i][:-1], instances[i][-1], i, pos_vects, word_vects)
-                else:
-                    row = make_csv_row(instances[i], i, pos_vects, word_vects)
+                row = next_row(i, instances, n_columns, pos_vects, word_vects, svmlight)
                 out.write(row)
-                n += 1
-                write_count += 1
-        logging.info("Wrote {} instances (total: {}) size:{} MB".format(write_count, n, get_size(output_filename)))
+                n_written += 1
+            logging.debug("split: {} after good: {} written".format(split, n_written))
         split += 1
+        n_written_split = split_size if n_written % split_size is 0 else n_written % split_size
+        logging.info("Wrote {} instances (total: {}) size:{} MB".format(n_written_split, n_written,
+                                                                        get_size(output_filename)))
 
-    save_dataset_metadata(encode, output_path, "goodvsbad", pos_max_features, pos_min_df, pos_ngram, pos_vec_func,
-                          pos_vectorizer, source_filepath, timestamp, word_max_features, word_min_df, word_vectorizer,
-                          tokenize_rant, tokenize_pos)
-    logging.info("Work complete!")
+
+def next_row(i, instances, n_columns, pos_vects, word_vects, svmlight):
+    if svmlight:
+        row = make_svmlight_row(instances[i][:-1], instances[i][-1], i, pos_vects, word_vects)
+    else:
+        row = make_csv_row(instances[i], i, pos_vects, word_vects)
+        assert n_columns == len(row.split(',')), \
+            "row columns doesn'm match header! h:{} r:{}".format(n_columns, len(row.split(',')))
+    return row
 
 
 def save_features_json(filepath, feature_names):

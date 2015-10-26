@@ -116,8 +116,7 @@ def token_counts(rant_tokens):
     return counts_
 
 
-def vectorize_text(raw_documents, _, vectorizer, tokenizer, min_df, max_features, stop_words=None, ngram_range=(1, 1),
-                   dict_filename=None):
+def vectorize_text(raw_documents, _, vectorizer, tokenizer, min_df, max_features, stop_words=None, ngram_range=(1, 1)):
     if max_features is 0:
         return sp.csr_matrix([]), []
     vec = vectorizer(tokenizer=tokenizer, ngram_range=ngram_range, stop_words=stop_words, strip_accents='unicode',

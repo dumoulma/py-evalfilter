@@ -10,7 +10,7 @@ import click
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 
 from datasets.fuman_raw import load_fuman_csv, load_rants, load_target_rants
-from datasets.csv_output import generate_header, make_csv_row, save_dataset_metadata
+from datasets.csv_output import vector_headers, make_csv_row, save_dataset_metadata
 from datasets.features import vectorize_text, vectorise_text_fit, encode_categoricals
 from util.mecab import tokenize_rant, tokenize_pos, STOPWORDS
 from util.file import get_size
@@ -99,7 +99,7 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
     # output to CSV
     n_splits = 1
     split_start = 0
-    headers = generate_header(pos_vects, word_vects)
+    headers = vector_headers(pos_vects, word_vects)
     n_columns = len(headers.split(','))
     logging.info("Final dataset: {} instances {} features".format(n_instances, n_columns))
     while n_splits <= max_splits and split_start < n_instances:

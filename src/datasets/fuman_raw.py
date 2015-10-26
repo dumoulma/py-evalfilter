@@ -11,7 +11,7 @@ GENDER = {0: "unk", 1: 'male', 2: 'female'}
 BOOLEAN = {0: 'False', 1: 'True'}
 
 
-def get_header():
+def manual_features_header():
     header = "hasIndustry,hasOccupation,hasCompany,hasProductName,hasProposal,empathies,"
     header += "birthyear,state,gender,job,"
     header += cf.get_header()
@@ -127,8 +127,8 @@ class FumanDataset(object):
     def __iter__(self):
         with open(self.file_path, newline='') as csvfile:
             reader = csv.reader(csvfile, delimiter=',', quotechar="'")
-            headers = next(reader)  # skip headers
-            logging.debug("Got headers: {}".format(headers))
+            self.headers = next(reader)  # skip headers
+            logging.debug("Got headers: {}".format(self.headers))
             for row in reader:
                 yield row
 
