@@ -37,11 +37,10 @@ VECTORIZERS = {'tfidf': TfidfVectorizer, 'count': CountVectorizer}
 @click.option('--pos_ngram', default=3)
 @click.option('--word_vec', type=click.Choice(['tfidf', 'count']), default='tfidf')
 @click.option('--pos_vec', type=click.Choice(['tfidf', 'count']), default='count')
-@click.option('--encode', is_flag=True)
-@click.option('--svmlight', is_flag=True)
+@click.option('--sparse', is_flag=True)
 @click.option('--simple_headers', is_flag=True)
 def main(source, output, split_size, max_splits, word_max_features, pos_max_features, word_min_df, pos_min_df,
-         pos_bad_only, word_vec, pos_vec, pos_ngram, encode, svmlight, simple_headers):
+         pos_bad_only, word_vec, pos_vec, pos_ngram, sparse, simple_headers):
     """
     Generates a good vs bad training dataset from Fuman user posts. (Binary Classification)
 
@@ -64,8 +63,6 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
     """
     if not os.path.isdir(output):
         raise ValueError("Output must be a directory")
-    if svmlight and not encode:
-        raise ValueError("smlight option set, but encode option not set!")
 
     if os.path.isfile(source):
         source_filepath = source
@@ -105,18 +102,18 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
             "Word and Pos vector row counts dont match! w:{} p:{}".format(word_vects.shape[0], pos_vects.shape[0])
     logging.info("Loading instances from CSV...")
     instances = list(load_fuman_csv(source_filepath, target_var_func=set_goodvsbad_label))
-    if encode:
+    if sparse:
         instances = encode_categoricals(instances)
-    write_dataset(instances, max_splits, output_path, pos_features, pos_vects, simple_headers, split_size, svmlight,
+    write_dataset(instances, max_splits, output_path, pos_features, pos_vects, simple_headers, split_size, sparse,
                   timestamp, word_features, word_max_features, word_vects)
 
-    save_dataset_metadata(encode, output_path, "goodvsbad", pos_max_features, pos_min_df, pos_ngram, pos_vec_func,
+    save_dataset_metadata(sparse, output_path, "goodvsbad", pos_max_features, pos_min_df, pos_ngram, pos_vec_func,
                           pos_vectorizer, source_filepath, timestamp, word_max_features, word_min_df, word_vectorizer,
                           tokenize_rant, tokenize_pos)
     logging.info("Work complete!")
 
 
-def write_dataset(instances, max_splits, output_path, pos_features, pos_vects, simple_headers, split_size, svmlight,
+def write_dataset(instances, max_splits, output_path, pos_features, pos_vects, simple_headers, split_size, sparse,
                   timestamp, word_features, word_max_features, word_vects):
     good_indices = list(i for i, x in enumerate(instances) if x[-1] is -1)
     bad_indices = list(i for i, x in enumerate(instances) if x[-1] is 1)
@@ -144,16 +141,16 @@ def write_dataset(instances, max_splits, output_path, pos_features, pos_vects, s
         output_filename = os.path.join(output_path, "{}-{}-{}.csv".format("goodvsbad", timestamp, split))
         logging.info("Writing to: " + output_filename)
         with open(output_filename, 'w', encoding='utf-8') as out:
-            if not svmlight:
+            if not sparse:
                 out.write(headers)
             for i in bad_indices:
-                row = next_row(i, instances, n_columns, pos_vects, word_vects, svmlight)
+                row = next_row(i, instances, n_columns, pos_vects, word_vects, sparse)
                 out.write(row)
             n_written += n_bad
             logging.debug("split: {} after bad: {} written".format(split, n_written))
             while len(good_indices) is not 0 and n_written % split_size is not 0:
                 i = good_indices.pop()
-                row = next_row(i, instances, n_columns, pos_vects, word_vects, svmlight)
+                row = next_row(i, instances, n_columns, pos_vects, word_vects, sparse)
                 out.write(row)
                 n_written += 1
             logging.debug("split: {} after good: {} written".format(split, n_written))
@@ -163,8 +160,8 @@ def write_dataset(instances, max_splits, output_path, pos_features, pos_vects, s
                                                                         get_size(output_filename)))
 
 
-def next_row(i, instances, n_columns, pos_vects, word_vects, svmlight):
-    if svmlight:
+def next_row(i, instances, n_columns, pos_vects, word_vects, sparse):
+    if sparse:
         row = make_svmlight_row(instances[i][:-1], instances[i][-1], i, pos_vects, word_vects)
     else:
         row = make_csv_row(instances[i], i, pos_vects, word_vects)
