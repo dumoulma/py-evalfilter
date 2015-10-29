@@ -97,7 +97,6 @@ def main(source, output, split_size, max_splits, pos_max_features, pos_min_df, p
     logging.info("Processing pipeline...")
     fuman_data = load_fuman_rants(source_filepath, fuman_gvb_target)
     X = pipeline.fit_transform(fuman_data.data)
-    y = np.asarray(fuman_data.target, dtype=np.float64).reshape((X.shape[0], 1))
     save_features_json(pos_dict_filename, vectorizer.get_feature_names())
     headers = get_header()
     if not pos_max_features:
@@ -105,10 +104,11 @@ def main(source, output, split_size, max_splits, pos_max_features, pos_min_df, p
     headers += ',target'
 
     if sparse:
+        y = np.asarray(fuman_data.target, dtype=np.float64).reshape((X.shape[0],))
         with open(output_filename, mode='wb') as f:
             dump_svmlight_file(X, y, f)
     else:
-        # y = sp.sparse.csr_matrix(y)
+        y = np.asarray(fuman_data.target, dtype=np.float64).reshape((X.shape[0], 1))
         all_data = sp.sparse.hstack([X, y]).todense()
         np.savetxt(output_filename, all_data, delimiter=',', header=headers)
         save_dataset_metadata2(sparse, output_path, "goodvsbad", pos_max_features, pos_min_df, pos_ngram, pos_vec_func,
