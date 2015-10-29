@@ -42,14 +42,22 @@ def check_row_format(i, row):
     if not isinstance(row, list):
         row = row.rstrip().split(',')
     if len(row) is not 16:
-        logging.warning("Row with bad number of fields at line {}".format(i))
+        logging.debug("Row with bad number of fields at line {}".format(i))
         return False
     try:
         int(row[1]), int(row[2]), int(row[3]), int(row[4]), int(row[6]), int(row[7]), int(row[8]), int(row[15])
         return True
     except ValueError as ve:
-        logging.warning("Parse problem for row {}: {} ({})".format(i, row, ve))
+        logging.debug("Parse problem for row {}: {} ({})".format(i, row, ve))
     return False
+
+
+def load_fuman_rants2(file_path1, file_path2, target_func):
+    good_data = load_fuman_rants(file_path1, target_func)
+    bad_data = load_fuman_rants(file_path2, target_func)
+    return Bunch(data=good_data.data.append(bad_data.data),
+                 target=good_data.target.append(bad_data.target),
+                 DESCR="Fuman DB csv dump dataset")
 
 
 def load_fuman_rants(file_path, target_func):
@@ -59,7 +67,30 @@ def load_fuman_rants(file_path, target_func):
     #     n_samples = sum(1 for i, row in enumerate(csvfile) if check_row_format(i, row)) + 1
     data = list()
     target = list()
+    parse_errors = 0
+    n_samples = 0
     with open(file_path, newline='') as csv_file:
+        data_file = csv.reader(csv_file, delimiter=',', quotechar="'")
+        next(data_file)
+        for row in data_file:
+            if not check_row_format(row[0], row):
+                parse_errors += 1
+                continue
+            data.append(unicodedata.normalize('NFKC', row[5]))
+            status = int(row[6])
+            price = int(row[15])
+            target.append(target_func(status, price))
+            n_samples += 1
+    logging.info('Finished loading data. (read: {} errors: {})'.format(n_samples, parse_errors))
+    return Bunch(data=data,
+                 target=target,
+                 DESCR="Fuman DB csv dump dataset")
+
+
+def load_bad_fuman(bad_file_path, target_func):
+    data = list()
+    target = list()
+    with open(bad_file_path, newline='') as csv_file:
         data_file = csv.reader(csv_file, delimiter=',', quotechar="'")
         next(data_file)
         for row in data_file:
