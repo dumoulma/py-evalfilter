@@ -24,7 +24,7 @@ from datasets.output import save_dataset_metadata2, save_features_json
 from datasets.fuman_features import vectorize_text, vectorise_text_fit
 from util.mecab import tokenize_pos
 from datasets.fuman_features import RantStats, get_header
-from datasets.fuman_base import fuman_gvb_target
+from util.file import get_size
 
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
@@ -131,7 +131,8 @@ def dump_csv(output_path, X, y, pos_features, nth_fold, timestamp, simple_header
             row = ','.join(str(X[i, j]) for j in range(n_features))
             row = re.sub(regex, r'\1,', row)
             f.write('{},{}\n'.format(row, y[i][0]))
-    logging.info("Wrote fold {} to {} ({} instances)".format(nth_fold, output_filename, n_samples))
+    logging.info("Wrote fold {} to {} ({} instances {} MB)".format(nth_fold, output_filename, n_samples,
+                                                                   get_size(output_filename)))
 
 
 def get_pos_header(features, simple_headers):
