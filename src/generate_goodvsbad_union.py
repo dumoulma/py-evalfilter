@@ -19,7 +19,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 
 from sklearn.pipeline import FeatureUnion, Pipeline
 
-from datasets.fuman_base import load_fuman_rants
+from datasets.fuman_base import load_fuman_gvb
 from datasets.output import save_dataset_metadata2, save_features_json
 from datasets.fuman_features import vectorize_text, vectorise_text_fit
 from util.mecab import tokenize_pos
@@ -64,10 +64,8 @@ def main(source, output, n_folds, pos_max_features, pos_min_df, pos_bad_only, po
         raise ValueError("Output must be a directory")
 
     if os.path.isfile(source):
-        source_filepath = source
-    else:
-        source_filepath = os.path.join(source, ALLSCORED)
-    logging.info("Source dump: {}".format(source_filepath))
+        raise ValueError("Source must be a directory")
+    logging.info("Source dump: {}".format(source))
     timestamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d-%H_%M_%S')
     logging.info("Timestamp: {}".format(timestamp))
     output_path = os.path.join(output, "gvb-" + timestamp)
@@ -94,7 +92,7 @@ def main(source, output, n_folds, pos_max_features, pos_min_df, pos_bad_only, po
         ])
 
     logging.info("Processing pipeline...")
-    fuman_data = load_fuman_rants(source_filepath, fuman_gvb_target)
+    fuman_data = load_fuman_gvb(source)
     X = pipeline.fit_transform(fuman_data.data)
     n_samples = X.shape[0]
     y = np.asarray(fuman_data.target, dtype=np.int8).reshape((n_samples,))
@@ -106,7 +104,7 @@ def main(source, output, n_folds, pos_max_features, pos_min_df, pos_bad_only, po
         dump_csv(output_path, X[test_index], y[test_index], vectorizer.get_feature_names(), i, timestamp,
                  simple_headers, sparse)
     save_dataset_metadata2(sparse, output_path, "goodvsbad", pos_max_features, pos_min_df, pos_ngram, pos_vec_func,
-                           vectorizer, source_filepath, timestamp, tokenize_pos)
+                           vectorizer, source, timestamp, tokenize_pos)
     logging.info("Work complete!")
 
 
@@ -133,7 +131,7 @@ def dump_csv(output_path, X, y, pos_features, nth_fold, timestamp, simple_header
             row = ','.join(str(X[i, j]) for j in range(n_features))
             row = re.sub(regex, r'\1,', row)
             f.write('{},{}\n'.format(row, y[i][0]))
-    logging.info("Wrote fold {} to {}".format(nth_fold, output_filename))
+    logging.info("Wrote fold {} to {} ({} instances)".format(nth_fold, output_filename, n_samples))
 
 
 def get_pos_header(features, simple_headers):

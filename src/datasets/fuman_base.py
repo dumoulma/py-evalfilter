@@ -1,5 +1,6 @@
 import logging
 import csv
+from os import path
 from datetime import date
 
 from sklearn.datasets.base import Bunch
@@ -52,9 +53,9 @@ def check_row_format(i, row):
     return False
 
 
-def load_fuman_rants2(file_path1, file_path2, target_func):
-    good_data = load_fuman_rants(file_path1, target_func)
-    bad_data = load_fuman_rants(file_path2, target_func)
+def load_fuman_rants2(file_path, target_func):
+    good_data = load_fuman_rants(path.join(file_path, "good-rants.csv"), target_func)
+    bad_data = load_fuman_rants(path.join(file_path, "bad-rants.csv"), target_func)
     return Bunch(data=good_data.data.append(bad_data.data),
                  target=good_data.target.append(bad_data.target),
                  DESCR="Fuman DB csv dump dataset")
@@ -87,19 +88,35 @@ def load_fuman_rants(file_path, target_func):
                  DESCR="Fuman DB csv dump dataset")
 
 
-def load_bad_fuman(bad_file_path, target_func):
+def load_fuman_gvb(file_path):
     data = list()
     target = list()
-    with open(bad_file_path, newline='') as csv_file:
+    parse_errors = 0
+    n_samples = 0
+    with open(path.join(file_path, "good-rants.csv"), newline='') as csv_file:
         data_file = csv.reader(csv_file, delimiter=',', quotechar="'")
         next(data_file)
         for row in data_file:
             if not check_row_format(row[0], row):
+                parse_errors += 1
                 continue
             data.append(unicodedata.normalize('NFKC', row[5]))
-            status = int(row[6])
-            price = int(row[15])
-            target.append(target_func(status, price))
+            target.append(-1)
+            n_samples += 1
+    n_good = n_samples
+    logging.info("Read {} good instances".format(n_good))
+    with open(path.join(file_path, "bad-rants.csv"), newline='') as csv_file:
+        data_file = csv.reader(csv_file, delimiter=',', quotechar="'")
+        next(data_file)
+        for row in data_file:
+            if not check_row_format(row[0], row):
+                parse_errors += 1
+                continue
+            data.append(unicodedata.normalize('NFKC', row[5]))
+            target.append(1)
+            n_samples += 1
+    logging.info("Read {} bad instances".format(n_samples - n_good))
+    logging.info('Finished loading data. (read: {} errors: {})'.format(n_samples, parse_errors))
     return Bunch(data=data,
                  target=target,
                  DESCR="Fuman DB csv dump dataset")
