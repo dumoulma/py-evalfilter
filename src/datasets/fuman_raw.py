@@ -1,14 +1,11 @@
 import logging
 import csv
-from datetime import date
 
 import unicodedata
-import datasets.features as cf
+from datasets.fuman_base import to_binary_categorical, get_age, get_gender
+import datasets.fuman_features as cf
 
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
-
-GENDER = {0: "unk", 1: 'male', 2: 'female'}
-BOOLEAN = {0: 'False', 1: 'True'}
 
 
 def manual_features_header():
@@ -91,29 +88,6 @@ def load_fuman_csv(filepath, target_var_func=None):
         yield x
 
 
-def get_gender(raw_gender):
-    if raw_gender == '''\\0''':
-        g = 0
-    else:
-        try:
-            g = int(raw_gender)
-        except ValueError as ve:
-            logging.warning("Can't parse gender, set to UNKNOWN (got: {})".format(ve))
-            g = 0
-    return GENDER[g]
-
-
-def get_age(raw_age):
-    age = int(raw_age)
-    if age is 0:
-        return 0
-    return date.today().year - age
-
-
-def to_binary_categorical(raw_field):
-    return BOOLEAN[int(raw_field)]
-
-
 class FumanDataset(object):
     """
         Iterable of the raw CSV data from the dump of the FumanDB
@@ -135,8 +109,3 @@ class FumanDataset(object):
 
 if __name__ == "__main__":
     pass
-    # s = 'ミッドソールにはSpEVAと、Solyteを組み合わせたフルイドライドを採用し、流れるようになめらかな走り心地が実現。'
-    # tokens = _tokenize(s)
-    #
-    # # id,hasIndustry,hasOccupation,hasCompany,hasProductName,rants,status,hasProposals,empathies,hasLatitude,
-    # # hasLongitude,birth_year,state,gender,job,price

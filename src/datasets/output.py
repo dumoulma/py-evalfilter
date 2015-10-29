@@ -97,6 +97,29 @@ def generate_vector_headers(v, prefix):
     return ','.join([prefix + str(i) for i in range(v.shape[1])]) + ','
 
 
+def save_dataset_metadata2(encode, output_path, dataset_type, pos_max_features, pos_min_df, pos_ngram, pos_vec_func,
+                          pos_vectorizer, source_filepath, timestamp, tokenize_pos):
+    dataset_meta = {
+        'timestamp': timestamp,
+        'dataset': dataset_type,
+        'input': str(source_filepath),
+        'pos_max_features': str(pos_max_features),
+        'pos_min_df': str(pos_min_df),
+        'pos_ngram': str(pos_ngram),
+        'pos_tokenizer': tokenize_pos.__name__,
+        'pos_vectorizer': str(pos_vectorizer),
+        'pos_vectorizer_func': pos_vec_func.__name__,
+    }
+    if encode:
+        dataset_meta['encode_categoricals'] = 'True'
+    metadata_output = os.path.join(output_path, "metadata-{}.json".format(timestamp))
+    metadata_json = json.dumps(dataset_meta, indent=4, separators=(',', ': '))
+    logging.info(metadata_json)
+    with open(metadata_output, 'w', encoding='utf-8') as out:
+        out.write(metadata_json)
+    logging.info("Metadata saved to {}".format(metadata_output))
+
+
 def save_dataset_metadata(encode, output_path, dataset_type, pos_max_features, pos_min_df, pos_ngram, pos_vec_func,
                           pos_vectorizer, source_filepath, timestamp, word_max_features, word_min_df, word_vectorizer,
                           tokenize_rant, tokenize_pos):
@@ -123,3 +146,10 @@ def save_dataset_metadata(encode, output_path, dataset_type, pos_max_features, p
     with open(metadata_output, 'w', encoding='utf-8') as out:
         out.write(metadata_json)
     logging.info("Metadata saved to {}".format(metadata_output))
+
+def save_features_json(filepath, feature_names):
+    if not feature_names:
+        return
+    with open(filepath, mode='w') as out:
+        out.write(json.dumps(feature_names, ensure_ascii=False, indent=4, separators=(',', ':')))
+        logging.info("Saved features to: {}".format(filepath))

@@ -12,9 +12,9 @@ import click
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 
 from datasets.fuman_raw import load_fuman_csv, load_rants, load_target_rants, manual_features_header
-from datasets.csv_output import vector_headers, make_csv_row, save_dataset_metadata, \
+from datasets.output import vector_headers, make_csv_row, save_dataset_metadata, \
     make_svmlight_row
-from datasets.features import vectorize_text, vectorise_text_fit, encode_categoricals
+from datasets.fuman_features import vectorize_text, vectorise_text_fit, encode_categoricals
 from util.mecab import tokenize_rant, tokenize_pos, STOPWORDS
 from util.file import get_size
 
@@ -59,7 +59,6 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
     :param word_vec: [tfidf, count] use corresponding term weighting
     :param pos_vec: [tfidf, count] use corresponding term weighting
     :param pos_ngram: Learn vocabulary with ngrams in range (1,pos_ngram) (default is 3)
-    :param encode:
     """
     if not os.path.isdir(output):
         raise ValueError("Output must be a directory")
@@ -87,13 +86,13 @@ def main(source, output, split_size, max_splits, word_max_features, pos_max_feat
     word_vects, word_features = vectorize_text(load_rants(filepath=source_filepath), None, vectorizer=TfidfVectorizer,
                                                tokenizer=tokenize_rant, stop_words=STOPWORDS, min_df=word_min_df,
                                                max_features=word_max_features)
+
     pos_vects, pos_features = pos_vec_func(load_rants(filepath=source_filepath),
                                            load_target_rants(filepath=source_filepath, target=1,
                                                              target_var_func=set_goodvsbad_label),
                                            vectorizer=CountVectorizer, tokenizer=tokenize_pos,
                                            ngram_range=(1, pos_ngram),
                                            min_df=pos_min_df, max_features=pos_max_features)
-
     save_features_json(word_dict_filename, word_features)
     save_features_json(pos_dict_filename, pos_features)
 

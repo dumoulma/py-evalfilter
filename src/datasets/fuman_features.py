@@ -1,9 +1,9 @@
 import logging
 import collections
 from functools import partial
-import json
 
 import scipy.sparse as sp
+from sklearn.base import BaseEstimator, TransformerMixin
 
 import unicodedata
 from util.mecab import tokenize_rant
@@ -20,6 +20,42 @@ PUNCT = {'、', '。', '「', '」', '（', '）', '＆', 'ー', '-', '＃', '�
 def get_header():
     return "katacount,hiracount,kanjicount,alphacount,digitcount,markcount,punctcount,totaltokens,1chartokens," + \
            "2chartokens,3chartokens,4chartokens,5+chartokens,avgTokenLength"
+
+
+class RantStats(BaseEstimator, TransformerMixin):
+    """Extract features from each rant for DictVectorizer"""
+
+    def fit(self, x, y=None):
+        return self
+
+    def transform(self, rants):
+        def get_token_counts(_rants):
+            for rant in _rants:
+                yield token_counts(tokenize_rant(rant, min_length=1))
+
+        def avg_token_length(counts_dict):
+            total_tokens = sum(counts_dict.values())
+            if not token_counts:
+                return 0.0
+            return sum([k * v for k, v in counts_dict.items()]) / total_tokens  # avgTokenLength
+
+        return [{'kata': count_unicode_chars(rant, KATAKANA),
+                 'hira': count_unicode_chars(rant, HIRAGANA),
+                 'kanji': count_unicode_chars(rant, KANJI),
+                 'alpha': count_unicode_chars(rant, ALPHA),
+                 'digit': count_unicode_chars(rant, DIGIT),
+                 'marks': count_chars_in_set(rant, is_mark),
+                 'punct': count_chars_in_set(rant, is_punct),
+                 'tokens': sum(counts_dict.values()),
+                 '1char': counts_dict[1],
+                 '2char': counts_dict[2],
+                 '3char': counts_dict[3],
+                 '4char': counts_dict[4],
+                 '5+char': counts_dict[5],
+                 'avgTokenLength': avg_token_length(counts_dict)
+                 }
+                for rant, counts_dict in zip(rants, get_token_counts(rants))
+                ]
 
 
 def rant_text_features(x, rant):
@@ -168,4 +204,4 @@ def categorical_to_binary(X):
     # values = [b, b, b, b, b, len(set(x[7] for x in X)), len(set(x[8] for x in X)), len(set(x[9] for x in X))]
     ohe = pp.OneHotEncoder(categorical_features=[0, 1, 2, 3, 4, 7, 8, 9], sparse=False)
     ohe.fit(X)
-    return ohe.ztransform(X)
+    return ohe.transform(X)
