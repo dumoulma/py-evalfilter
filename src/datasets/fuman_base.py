@@ -88,12 +88,21 @@ def load_fuman_rants(file_path, target_func):
                  DESCR="Fuman DB csv dump dataset")
 
 
-def load_fuman_gvb(file_path):
+def load_fuman_gvb(file_path, bad_filename="bad-rants.csv", good_filename="good-rants.csv"):
     data = list()
     target = list()
     parse_errors = 0
-    n_samples = 0
-    with open(path.join(file_path, "good-rants.csv"), newline='') as csv_file:
+    n_read = 0
+    with open(path.join(file_path, bad_filename), newline='') as csv_file:
+        data_file = csv.reader(csv_file, delimiter=',', quotechar="'")
+        next(data_file)
+        for row in data_file:
+            data.append(unicodedata.normalize('NFKC', row[5]))
+            target.append(1)
+            n_read += 1
+    n_bad = n_read
+    logging.info("Read {} bad instances".format(n_read))
+    with open(path.join(file_path, good_filename), newline='') as csv_file:
         data_file = csv.reader(csv_file, delimiter=',', quotechar="'")
         next(data_file)
         for row in data_file:
@@ -102,21 +111,9 @@ def load_fuman_gvb(file_path):
                 continue
             data.append(unicodedata.normalize('NFKC', row[5]))
             target.append(-1)
-            n_samples += 1
-    n_good = n_samples
-    logging.info("Read {} good instances".format(n_good))
-    with open(path.join(file_path, "bad-rants.csv"), newline='') as csv_file:
-        data_file = csv.reader(csv_file, delimiter=',', quotechar="'")
-        next(data_file)
-        for row in data_file:
-            if not check_row_format(row[0], row):
-                parse_errors += 1
-                continue
-            data.append(unicodedata.normalize('NFKC', row[5]))
-            target.append(1)
-            n_samples += 1
-    logging.info("Read {} bad instances".format(n_samples - n_good))
-    logging.info('Finished loading data. (read: {} errors: {})'.format(n_samples, parse_errors))
+            n_read += 1
+    logging.info("Read {} good instances".format(n_read - n_bad))
+    logging.info('Finished loading data. (read: {} errors: {})'.format(n_read, parse_errors))
     return Bunch(data=data,
                  target=target,
                  DESCR="Fuman DB csv dump dataset")
