@@ -98,7 +98,7 @@ def generate_vector_headers(v, prefix):
 
 
 def save_dataset_metadata2(encode, output_path, dataset_type, pos_max_features, pos_min_df, pos_ngram, pos_vec_func,
-                          pos_vectorizer, source_filepath, timestamp, tokenize_pos):
+                           pos_vectorizer, source_filepath, timestamp, tokenize_pos):
     dataset_meta = {
         'timestamp': timestamp,
         'dataset': dataset_type,
@@ -147,9 +147,10 @@ def save_dataset_metadata(encode, output_path, dataset_type, pos_max_features, p
         out.write(metadata_json)
     logging.info("Metadata saved to {}".format(metadata_output))
 
+
 def save_features_json(filepath, feature_names):
     if not feature_names:
         return
     with open(filepath, mode='w') as out:
         out.write(json.dumps(feature_names, ensure_ascii=False, indent=4, separators=(',', ':')))
-        logging.info("Saved features to: {}".format(filepath))
+        logging.info("Saved {} features to JSON ({})".format(len(feature_names), filepath))
