@@ -120,23 +120,16 @@ def save_dataset_metadata2(encode, output_path, dataset_type, pos_max_features, 
     logging.info("Metadata saved to {}".format(metadata_output))
 
 
-def save_dataset_metadata(encode, output_path, dataset_type, pos_max_features, pos_min_df, pos_ngram, pos_vec_func,
-                          pos_vectorizer, source_filepath, timestamp, word_max_features, word_min_df, word_vectorizer,
-                          tokenize_rant, tokenize_pos):
+def save_dataset_metadata(encode, output_path, dataset_type, pos_vectorizer, source_filepath, timestamp,
+                          word_vectorizer, tokenize_rant, tokenize_pos):
     dataset_meta = {
         'timestamp': timestamp,
         'dataset': dataset_type,
         'input': str(source_filepath),
-        'word_max_features': str(word_max_features),
-        'pos_max_features': str(pos_max_features),
-        'word_min_df': str(word_min_df),
-        'pos_min_df': str(pos_min_df),
-        'pos_ngram': str(pos_ngram),
         'word_tokenizer': tokenize_rant.__name__,
         'pos_tokenizer': tokenize_pos.__name__,
-        'pos_vectorizer': pos_vectorizer.__name__,
-        'word_vectorizer': word_vectorizer.__name__,
-        'pos_vectorizer_func': pos_vec_func.__name__,
+        'pos_vectorizer': str(pos_vectorizer),
+        'word_vectorizer': str(word_vectorizer),
     }
     if encode:
         dataset_meta['encode_categoricals'] = 'True'

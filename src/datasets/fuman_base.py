@@ -2,14 +2,13 @@ import logging
 import csv
 from os import path
 from datetime import date
+from collections import defaultdict
 
 from sklearn.datasets.base import Bunch
-import sklearn.preprocessing as pp
-import numpy as np
 
 import unicodedata
+import warnings
 
-FUMAN_PATH = "../../data/20150930/good-vs-bad-100.csv"
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
 GENDER = {0: "unk", 1: 'male', 2: 'female'}
@@ -53,19 +52,60 @@ def check_row_format(i, row):
     return False
 
 
-def load_fuman_rants2(file_path, target_func):
-    good_data = load_fuman_rants(path.join(file_path, "good-rants.csv"), target_func)
-    bad_data = load_fuman_rants(path.join(file_path, "bad-rants.csv"), target_func)
-    return Bunch(data=good_data.data.append(bad_data.data),
-                 target=good_data.target.append(bad_data.target),
+def fuman_price_target(_, price):
+    return int(price)
+
+
+def fuman_gvb_target(status, _):
+    if status is 100:  # code 100 is good fuman post
+        return -1
+    elif 200 <= status < 300:  # code 2XX are for bad fuman posts
+        return 1
+    else:
+        raise ValueError("Unexpected value for status")
+
+
+def load_fuman_price(file_path, filename="rants-price.csv"):
+    source_path = path.join(file_path, filename)
+    return load_fuman_userprofile(source_path, fuman_price_target)
+
+
+def load_fuman_userprofile(file_path, target_func):
+    data = defaultdict(list)
+    target = list()
+    parse_errors = 0
+    n_samples = 0
+    with open(file_path, newline='') as csv_file:
+        data_file = csv.reader(csv_file, delimiter=',', quotechar="'")
+        next(data_file)
+        for row in data_file:
+            if not check_row_format(row[0], row):
+                parse_errors += 1
+                continue
+            x = dict()
+            x['hasindustry'] = to_binary_categorical(row[1])
+            x['hasoccupation'] = to_binary_categorical(row[2])
+            x['hascompany'] = to_binary_categorical(row[3])
+            x['hasprodname'] = to_binary_categorical(row[4])
+            x['hasproposal'] = to_binary_categorical(row[7])
+            x['empathies'] = int(row[8])
+            x['birthyear'] = get_age(row[11])
+            x['state'] = row[12]
+            x['gender'] = get_gender(row[13])
+            x['job'] = row[14]
+            status = int(row[6])
+            price = int(row[15])
+            n_samples += 1
+            data['rant'].append(unicodedata.normalize('NFKC', row[5]))
+            data['userprofile'].append(x)
+            target.append(target_func(status, price))
+        logging.info('Finished loading data. (read: {} errors: {})'.format(n_samples, parse_errors))
+    return Bunch(data=data,
+                 target=target,
                  DESCR="Fuman DB csv dump dataset")
 
 
-def load_fuman_rants(file_path, target_func):
-    # with open(file_path, newline='') as csvfile:
-    #     reader = csv.reader(csvfile, delimiter=',', quotechar="'")
-    #     next(reader)  # skip headers
-    #     n_samples = sum(1 for i, row in enumerate(csvfile) if check_row_format(i, row)) + 1
+def load_fuman_rant(file_path, target_func):
     data = list()
     target = list()
     parse_errors = 0
@@ -118,56 +158,21 @@ def load_fuman_gvb(file_path, bad_filename="bad-rants.csv", good_filename="good-
                  target=target,
                  DESCR="Fuman DB csv dump dataset")
 
-
-def fuman_gvb_target(status, _):
-    if status is 100:  # code 100 is good fuman post
-        return -1
-    elif 200 <= status < 300:  # code 2XX are for bad fuman posts
-        return 1
-    else:
-        raise ValueError("Unexpected value for status")
-
-
-def fuman_price_target(_, price):
-    return int(price)
-
-
-def load_fuman(file_path):
-    data, target = zip(*[(r[:-1], r[-1]) for r in FumanDataset(file_path)])
-    logging.info("Finished reading data")
-    data, target = list(data), list(target)
-    le1 = pp.LabelEncoder()
-    encoded_gender = le1.fit_transform([x[23] for x in data])
-    le2 = pp.LabelEncoder()
-    encoded_state = le2.fit_transform([x[23] for x in data])
-    le3 = pp.LabelEncoder()
-    encoded_job = le3.fit_transform([x[23] for x in data])
-    for x, eg, es, ej in zip(data, encoded_gender, encoded_state, encoded_job):
-        x[23] = eg
-        x[25] = es
-        x[26] = ej
-    return Bunch(data=data,
-                 target=target,
-                 target_names=np.arange(10),
-                 DESCR="Fuman DB csv dump dataset")
-
-
-class FumanDataset(object):
-    """
-        Streams through the rants from the Fuman DB dump CSV file found
-        in 'filename', up to a maximum of k posts.
-
-        usage: for post in rant_iter(filename='path/to/file.csv')
-        :returns post (Str)
-    """
-
-    def __init__(self, file_path):
-        self.file_path = file_path
-
-    def __iter__(self):
-        with open(self.file_path, newline='') as csvfile:
-            reader = csv.reader(csvfile, delimiter=',', quotechar="'")
-            headers = next(reader)  # skip headers
-            logging.info("Got headers: {}".format(headers))
-            for row in reader:
-                yield row
+# def load_fuman(file_path):
+#     data, target = zip(*[(r[:-1], r[-1]) for r in FumanDataset(file_path)])
+#     logging.info("Finished reading data")
+#     data, target = list(data), list(target)
+#     le1 = pp.LabelEncoder()
+#     encoded_gender = le1.fit_transform([x[23] for x in data])
+#     le2 = pp.LabelEncoder()
+#     encoded_state = le2.fit_transform([x[23] for x in data])
+#     le3 = pp.LabelEncoder()
+#     encoded_job = le3.fit_transform([x[23] for x in data])
+#     for x, eg, es, ej in zip(data, encoded_gender, encoded_state, encoded_job):
+#         x[23] = eg
+#         x[25] = es
+#         x[26] = ej
+#     return Bunch(data=data,
+#                  target=target,
+#                  target_names=np.arange(10),
+#                  DESCR="Fuman DB csv dump dataset")
