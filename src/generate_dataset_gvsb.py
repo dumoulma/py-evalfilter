@@ -5,27 +5,31 @@ import os
 import time
 import datetime
 import fileinput
+import warnings
 
 import click
 import numpy as np
+
 from sklearn.feature_extraction import DictVectorizer
+
 from sklearn.cross_validation import StratifiedKFold
+
 from sklearn.datasets import dump_svmlight_file
+
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 
 from sklearn.pipeline import FeatureUnion, Pipeline
 
 from datasets.fuman_base import load_fuman_gvb
-from datasets.output import save_dataset_metadata2, save_features_json
-from datasets.fuman_features import vectorize_text, vectorise_text_fit
+from datasets.output import save_dataset_metadata, save_features_json
 from util.mecab import tokenize_pos
 from datasets.fuman_features import RantStats, get_header
 from util.file import get_size
 
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
-GOOD_FILENAME = "good-rants.csv"
-BAD_FILENAME = "bad-rants.csv"
+GOOD_FILENAME = "good-rants-4189.csv"
+BAD_FILENAME = "bad-rants-4189.csv"
 PRICE_FILENAME = "rants-price.csv"
 VECTORIZERS = {'tfidf': TfidfVectorizer, 'count': CountVectorizer}
 
@@ -54,7 +58,6 @@ def main(source, output, n_folds, n_folds_max, pos_max_features, pos_min_df, pos
     :param n_folds: the number of splits to generate (using StratifiedKFold)
     :param pos_max_features: parameter for tf-idf vectorizer (default 50000)
     :param pos_min_df: parameter for tf-idf vectorizer (default 100)
-    :param pos_bad_only: learn vocabulary for POS from bad rants only (flag, default is all dataset)
     :param pos_vec: [tfidf, count] use corresponding term weighting
     :param pos_ngram: Learn vocabulary with ngrams in range (1,pos_ngram) (default is 3)
     """
@@ -67,16 +70,15 @@ def main(source, output, n_folds, n_folds_max, pos_max_features, pos_min_df, pos
     timestamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d-%H_%M_%S')
     logging.info("Timestamp: {}".format(timestamp))
     output_path = os.path.join(output, "gvsb-{}".format(timestamp))
-    if not os.path.exists(output_path):
-        os.makedirs(output_path)
 
-    pos_vectorizer_func = VECTORIZERS[pos_vec]
-    pos_dict_filename = os.path.join(output_path, "pos-vocabulary-" + timestamp + ".json")
-    vectorizer = pos_vectorizer_func(tokenizer=tokenize_pos, ngram_range=(1, pos_ngram), strip_accents='unicode',
-                                     min_df=pos_min_df, max_features=pos_max_features)
     pipeline = Pipeline([('stats', RantStats()),  # returns a list of dicts
                          ('vect', DictVectorizer())])  # list of dicts -> feature matrix
+    vectorizer = None
     if pos_max_features:
+        pos_vectorizer_func = VECTORIZERS[pos_vec]
+        pos_dict_filename = os.path.join(output_path, "pos-vocabulary-" + timestamp + ".json")
+        vectorizer = pos_vectorizer_func(tokenizer=tokenize_pos, ngram_range=(1, pos_ngram), strip_accents='unicode',
+                                         min_df=pos_min_df, max_features=pos_max_features)
         pipeline = Pipeline([
             ('union', FeatureUnion(
                 transformer_list=[
@@ -87,26 +89,33 @@ def main(source, output, n_folds, n_folds_max, pos_max_features, pos_min_df, pos
 
     fuman_data = load_fuman_gvb(source, good_filename=GOOD_FILENAME, bad_filename=BAD_FILENAME)
     logging.info("Processing pipeline...")
-    X = pipeline.fit_transform(fuman_data.data)
-    n_samples = X.shape[0]
-    y = np.asarray(fuman_data.target, dtype=np.int8).reshape((n_samples,))
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="deprecated", module="sklearn")
+        X = pipeline.fit_transform(fuman_data.data)
+        n_samples = X.shape[0]
+        y = np.asarray(fuman_data.target, dtype=np.int8).reshape((n_samples,))
 
-    save_features_json(pos_dict_filename, vectorizer.get_feature_names())
-    logging.info("Saving {} folds to disk...".format(n_folds))
-    skf = StratifiedKFold(y, n_folds=n_folds, shuffle=True)
-    for i, (_, test_index) in enumerate(skf, 1):
-        dump_csv(output_path, X[test_index], y[test_index], vectorizer.get_feature_names(), i, timestamp,
-                 feature_name_header, sparse)
-        if i == n_folds_max:
-            break
+        pos_features = list()
+        if pos_max_features:
+            pos_features = vectorizer.get_feature_names()
+            save_features_json(pos_dict_filename, pos_features)
 
-    save_dataset_metadata2(sparse, output_path, "goodvsbad", pos_max_features, pos_min_df, pos_ngram, pos_vec_func,
-                           vectorizer, source, timestamp, tokenize_pos)
+        logging.info("Saving {} folds to disk...".format(n_folds))
+        skf = StratifiedKFold(y, n_folds=n_folds, shuffle=True)
+        for i, (_, test_index) in enumerate(skf, 1):
+            dump_csv(output_path, X[test_index], y[test_index], pos_features, i, timestamp,
+                     feature_name_header, sparse)
+            if i == n_folds_max:
+                break
+        save_dataset_metadata(sparse, output_path, "goodvsbad", source_filepath=source, timestamp=timestamp,
+                              pos_vectorizer=vectorizer, tokenize_pos=tokenize_pos)
     logging.info("Work complete!")
 
 
 def dump_csv(output_path, X, y, pos_features, nth_fold, timestamp, feature_name_header, sparse):
     output_filename = os.path.join(output_path, "{}-{}-{}.csv".format("goodvsbad", timestamp, nth_fold))
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
     if sparse:
         with open(output_filename, mode='wb') as f:
             dump_svmlight_file(X, y, f)

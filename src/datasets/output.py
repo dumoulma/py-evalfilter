@@ -120,17 +120,19 @@ def save_dataset_metadata2(encode, output_path, dataset_type, pos_max_features, 
     logging.info("Metadata saved to {}".format(metadata_output))
 
 
-def save_dataset_metadata(encode, output_path, dataset_type, pos_vectorizer, source_filepath, timestamp,
-                          word_vectorizer, tokenize_rant, tokenize_pos):
+def save_dataset_metadata(encode, output_path, dataset_type, source_filepath, timestamp,
+                          pos_vectorizer=None, word_vectorizer=None, tokenize_rant=None, tokenize_pos=None):
     dataset_meta = {
         'timestamp': timestamp,
         'dataset': dataset_type,
         'input': str(source_filepath),
-        'word_tokenizer': tokenize_rant.__name__,
-        'pos_tokenizer': tokenize_pos.__name__,
-        'pos_vectorizer': str(pos_vectorizer),
-        'word_vectorizer': str(word_vectorizer),
     }
+    if word_vectorizer:
+        dataset_meta['word_tokenizer'] = tokenize_rant.__name__
+        dataset_meta['word_vectorizer'] = str(word_vectorizer)
+    if pos_vectorizer:
+        dataset_meta['pos_tokenizer'] = tokenize_pos.__name__
+        dataset_meta['pos_vectorizer'] = str(pos_vectorizer)
     if encode:
         dataset_meta['encode_categoricals'] = 'True'
     metadata_output = os.path.join(output_path, "metadata-{}.json".format(timestamp))
@@ -144,6 +146,9 @@ def save_dataset_metadata(encode, output_path, dataset_type, pos_vectorizer, sou
 def save_features_json(filepath, feature_names):
     if not feature_names:
         return
+    output_dir = os.path.split(filepath)[0]
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
     with open(filepath, mode='w') as out:
         out.write(json.dumps(feature_names, ensure_ascii=False, indent=4, separators=(',', ':')))
         logging.info("Saved {} features to JSON ({})".format(len(feature_names), filepath))
