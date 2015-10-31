@@ -9,17 +9,11 @@ import warnings
 
 import click
 import numpy as np
-
 from scipy import savetxt
-
 from scipy.sparse import hstack
-
 from sklearn.feature_extraction import DictVectorizer
-
 from sklearn.cross_validation import StratifiedKFold
-
 from sklearn.datasets import dump_svmlight_file
-
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 
 from sklearn.pipeline import FeatureUnion, Pipeline
@@ -34,7 +28,7 @@ logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=lo
 
 GOOD_FILENAME = "good-rants.csv"
 BAD_FILENAME = "bad-rants.csv"
-PRICE_FILENAME = "rants-price-4189.csv"
+PRICE_FILENAME = "rants-price.csv"
 VECTORIZERS = {'tfidf': TfidfVectorizer, 'count': CountVectorizer}
 
 
@@ -99,24 +93,24 @@ def main(source, output, n_folds, n_folds_max, rant_max_features, rant_min_df, p
 
     logging.info("Processing pipeline...")
     with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
+        warnings.filterwarnings("ignore", module="sklearn")
         X = pipeline.fit_transform(fuman_data.data)
-    n_samples = X.shape[0]
-    y = np.asarray(fuman_data.target, dtype=np.int8).reshape((n_samples,))
+        n_samples = X.shape[0]
+        y = np.asarray(fuman_data.target, dtype=np.int8).reshape((n_samples,))
 
-    save_features_json(pos_dict_filename, pos_vectorizer.get_feature_names())
-    save_features_json(rant_dict_filename, rant_vectorizer.get_feature_names())
+        save_features_json(pos_dict_filename, pos_vectorizer.get_feature_names())
+        save_features_json(rant_dict_filename, rant_vectorizer.get_feature_names())
 
-    logging.info("Saving {} of {} folds to disk...".format(n_folds_max, n_folds))
-    skf = StratifiedKFold(y, n_folds=n_folds, shuffle=True)
-    for i, (_, test_index) in enumerate(skf, 1):
-        dump_csv(output_path, X[test_index], y[test_index], i, pos_vectorizer.get_feature_names(),
-                 rant_vectorizer.get_feature_names(), timestamp, feature_name_header, sparse)
-        if i == n_folds_max:
-            break
-    save_dataset_metadata(sparse, output_path, "price",
-                          pos_vectorizer=pos_vectorizer, source_filepath=source, timestamp=timestamp,
-                          word_vectorizer=rant_vectorizer, tokenize_rant=tokenize_rant, tokenize_pos=tokenize_pos)
+        logging.info("Saving {} of {} folds to disk...".format(n_folds_max, n_folds))
+        skf = StratifiedKFold(y, n_folds=n_folds, shuffle=True)
+        for i, (_, test_index) in enumerate(skf, 1):
+            dump_csv(output_path, X[test_index], y[test_index], i, pos_vectorizer.get_feature_names(),
+                     rant_vectorizer.get_feature_names(), timestamp, feature_name_header, sparse)
+            if i == n_folds_max:
+                break
+        save_dataset_metadata(sparse, output_path, "price",
+                              pos_vectorizer=pos_vectorizer, source_filepath=source, timestamp=timestamp,
+                              word_vectorizer=rant_vectorizer, tokenize_rant=tokenize_rant, tokenize_pos=tokenize_pos)
     logging.info("Work complete!")
 
 
@@ -172,8 +166,10 @@ def dump_csv(output_path, X, y, nth_fold, pos_features, rant_features, timestamp
     header += ',target'
     y = y.reshape((n_samples, 1))
     all_data = hstack([X, y]).todense()
-    savetxt(output_filename, all_data, fmt='%.3f', delimiter=',', header="#" * len(header))
-    overwrite_header(header, output_filename)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        savetxt(output_filename, all_data, fmt='%.3f', delimiter=',', header="#" * len(header))
+        overwrite_header(header, output_filename)
     logging.info("Wrote fold {} to {} ({} instances {} MB)".format(nth_fold, output_filename, n_samples,
                                                                    get_size(output_filename)))
 
