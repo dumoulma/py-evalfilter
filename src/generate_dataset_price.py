@@ -4,28 +4,23 @@ import logging
 import os
 import time
 import datetime
-import fileinput
 import warnings
 
 import click
 import numpy as np
-from scipy import savetxt
-from scipy.sparse import hstack
+
 from sklearn.feature_extraction import DictVectorizer
 
 from sklearn.cross_validation import StratifiedKFold
-
-from sklearn.datasets import dump_svmlight_file
 
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 
 from sklearn.pipeline import FeatureUnion, Pipeline
 
 from datasets.fuman_base import load_fuman_price
-from datasets.output import save_dataset_metadata, save_features_json
+from datasets.output import save_dataset_metadata, save_features_json, make_header, dump_csv
 from util.mecab import tokenize_pos, tokenize_rant
-from datasets.fuman_features import FieldSelector, RantStats, UserProfileStats, get_header_userprofile
-from util.file import get_size
+from datasets.fuman_features import FieldSelector, RantStats, UserProfileStats
 
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
@@ -86,16 +81,18 @@ def main(source, output, n_folds, n_folds_max, word_max_features, word_min_df, p
     rant_dict_filename = os.path.join(output_path, "rant-features-" + timestamp + ".json")
     pos_dict_filename = os.path.join(output_path, "pos-features-" + timestamp + ".json")
 
+    rant_stats_vectorizer = DictVectorizer()
+    userprofile_vectorizer = DictVectorizer()
     transformer_list = [
         ('rant_stats', Pipeline([
             ('selector', FieldSelector(key='rant')),
             ('stats', RantStats()),  # returns a list of dicts
-            ('vect', DictVectorizer()),  # list of dicts -> feature matrix
+            ('vect', rant_stats_vectorizer),  # list of dicts -> feature matrix
         ])),
         ('userprofile_stats', Pipeline([
             ('selector', FieldSelector(key='userprofile')),
             ('stats', UserProfileStats()),  # returns a list of dicts
-            ('vect', DictVectorizer()),  # list of dicts -> feature matrix
+            ('vect', userprofile_vectorizer),  # list of dicts -> feature matrix
         ])),
     ]
 
@@ -126,80 +123,34 @@ def main(source, output, n_folds, n_folds_max, word_max_features, word_min_df, p
     logging.info("Processing pipeline...")
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", module="sklearn")
-        X = pipeline.fit_transform(fuman_data.data)
-        n_samples = X.shape[0]
+        instances = pipeline.fit_transform(fuman_data.data)
+        n_samples = instances.shape[0]
         y = np.asarray(fuman_data.target, dtype=np.int8).reshape((n_samples,))
 
         pos_features = list()
-        word_features = list()
+        rant_features = list()
         if pos_max_features:
             pos_features = pos_vectorizer.get_feature_names()
             save_features_json(pos_dict_filename, pos_features)
         if word_max_features:
-            word_features = word_vectorizer.get_feature_names()
-            save_features_json(rant_dict_filename, word_features)
-
+            rant_features = word_vectorizer.get_feature_names()
+            save_features_json(rant_dict_filename, rant_features)
+        header = make_header(rant_stats_vectorizer.get_feature_names(),
+                             userprofile_vectorizer.get_feature_names(),
+                             pos_features, rant_features, feature_name_header)
         logging.info("Saving {} of {} folds to disk...".format(n_folds_max, n_folds))
         if n_folds == 1:
-            dump_csv(output_path, X, y, 0, pos_features, word_features, timestamp, feature_name_header, sparse)
+            dump_csv(output_path, instances, y, 0, header, timestamp, sparse)
         else:
             skf = StratifiedKFold(y, n_folds=n_folds, shuffle=True)
             for i, (_, test_index) in enumerate(skf, 1):
-                dump_csv(output_path, X[test_index], y[test_index], i, pos_features, word_features, timestamp,
-                         feature_name_header, sparse)
+                dump_csv(output_path, instances[test_index], y[test_index], i, header, timestamp, sparse)
                 if i == n_folds_max:
                     break
         save_dataset_metadata(sparse, output_path, "price",
                               pos_vectorizer=pos_vectorizer, source_filepath=source, timestamp=timestamp,
                               word_vectorizer=word_vectorizer, tokenize_rant=tokenize_rant, tokenize_pos=tokenize_pos)
     logging.info("Work complete!")
-
-
-def dump_csv(output_path, X, y, nth_fold, pos_features, rant_features, timestamp, feature_name_header, sparse):
-    output_filename = os.path.join(output_path, "{}-{}-{}.csv".format("price", timestamp, nth_fold))
-    if not os.path.exists(output_path):
-        os.makedirs(output_path)
-    if sparse:
-        with open(output_filename, mode='wb') as f:
-            dump_svmlight_file(X, y, f)
-        return
-    n_samples = X.shape[0]
-    header = get_header_userprofile()
-    n_pos_features = len(pos_features)
-    if n_pos_features:
-        if feature_name_header:
-            header += ',' + ','.join(pos_features)
-        else:
-            header += ',' + ','.join("pos_" + str(i) for i in range(n_pos_features))
-    n_rant_features = len(rant_features)
-    if n_rant_features:
-        if feature_name_header:
-            header += ',' + ','.join(rant_features)
-        else:
-            header += ',' + ','.join("word_" + str(i) for i in range(n_rant_features))
-    header += ',target'
-    y = y.reshape((n_samples, 1))
-    all_data = hstack([X, y]).todense()
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        savetxt(output_filename, all_data, fmt='%.3f', delimiter=',', header="#" * len(header))
-        overwrite_header(header, output_filename)
-    logging.info("Wrote fold {} to {} ({} instances {} MB)".format(nth_fold, output_filename, n_samples,
-                                                                   get_size(output_filename)))
-
-
-def overwrite_header(header, output_filename):
-    """
-    Fixes the header by re-writing the header in place using FileInput.
-
-    :param header: the correct header
-    :param output_filename:
-    """
-    with fileinput.FileInput(output_filename, inplace=1) as fi:
-        fi.readline()
-        print(header)
-        for line in fi:
-            print(line, end='')
 
 
 if __name__ == "__main__":

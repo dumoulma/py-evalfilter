@@ -4,7 +4,6 @@ import logging
 import os
 import time
 import datetime
-import fileinput
 import warnings
 
 import click
@@ -14,17 +13,14 @@ from sklearn.feature_extraction import DictVectorizer
 
 from sklearn.cross_validation import StratifiedKFold
 
-from sklearn.datasets import dump_svmlight_file
-
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 
 from sklearn.pipeline import FeatureUnion, Pipeline
 
 from datasets.fuman_base import load_fuman_gvb
-from datasets.output import save_dataset_metadata, save_features_json
+from datasets.output import save_dataset_metadata, save_features_json, make_header, dump_csv
 from util.mecab import tokenize_pos
-from datasets.fuman_features import RantStats, get_header
-from util.file import get_size
+from datasets.fuman_features import RantStats
 
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
@@ -71,18 +67,19 @@ def main(source, output, n_folds, n_folds_max, pos_max_features, pos_min_df, pos
     logging.info("Timestamp: {}".format(timestamp))
     output_path = os.path.join(output, "gvsb-{}".format(timestamp))
 
+    rant_stats_vectorizer = DictVectorizer()
     pipeline = Pipeline([('stats', RantStats()),  # returns a list of dicts
-                         ('vect', DictVectorizer())])  # list of dicts -> feature matrix
+                         ('vect', rant_stats_vectorizer)])  # list of dicts -> feature matrix
     vectorizer = None
+    pos_dict_filename = os.path.join(output_path, "pos-vocabulary-" + timestamp + ".json")
     if pos_max_features:
         pos_vectorizer_func = VECTORIZERS[pos_vec]
-        pos_dict_filename = os.path.join(output_path, "pos-vocabulary-" + timestamp + ".json")
         vectorizer = pos_vectorizer_func(tokenizer=tokenize_pos, ngram_range=(1, pos_ngram), strip_accents='unicode',
                                          min_df=pos_min_df, max_features=pos_max_features)
         pipeline = Pipeline([
             ('union', FeatureUnion(
                 transformer_list=[
-                    ('body_stats', pipeline),
+                    ('rant_stats', pipeline),
                     ("pos_vec", vectorizer),
                 ]))
         ])
@@ -91,66 +88,25 @@ def main(source, output, n_folds, n_folds_max, pos_max_features, pos_min_df, pos
     logging.info("Processing pipeline...")
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="deprecated", module="sklearn")
-        X = pipeline.fit_transform(fuman_data.data)
-        n_samples = X.shape[0]
+        instances = pipeline.fit_transform(fuman_data.data)
+        n_samples = instances.shape[0]
         y = np.asarray(fuman_data.target, dtype=np.int8).reshape((n_samples,))
 
         pos_features = list()
         if pos_max_features:
             pos_features = vectorizer.get_feature_names()
             save_features_json(pos_dict_filename, pos_features)
-
+        header = make_header(rant_stats_vectorizer.get_feature_names(), pos_features=pos_features,
+                             feature_name_header=feature_name_header)
         logging.info("Saving {} folds to disk...".format(n_folds))
         skf = StratifiedKFold(y, n_folds=n_folds, shuffle=True)
         for i, (_, test_index) in enumerate(skf, 1):
-            dump_csv(output_path, X[test_index], y[test_index], pos_features, i, timestamp,
-                     feature_name_header, sparse)
+            dump_csv(output_path, instances[test_index], y[test_index], i, header, timestamp, sparse)
             if i == n_folds_max:
                 break
         save_dataset_metadata(sparse, output_path, "goodvsbad", source_filepath=source, timestamp=timestamp,
                               pos_vectorizer=vectorizer, tokenize_pos=tokenize_pos)
     logging.info("Work complete!")
-
-
-def dump_csv(output_path, X, y, pos_features, nth_fold, timestamp, feature_name_header, sparse):
-    output_filename = os.path.join(output_path, "{}-{}-{}.csv".format("goodvsbad", timestamp, nth_fold))
-    if not os.path.exists(output_path):
-        os.makedirs(output_path)
-    if sparse:
-        with open(output_filename, mode='wb') as f:
-            dump_svmlight_file(X, y, f)
-        return
-    n_samples = X.shape[0]
-    header = get_header()
-    n_pos_features = len(pos_features)
-    if n_pos_features:
-        if feature_name_header:
-            header += ',' + ','.join(pos_features)
-        else:
-            header += ',' + ','.join("pos_" + str(i) for i in range(n_pos_features))
-
-    header += ',target'
-    y = y.reshape((n_samples, 1))
-    import scipy as sp
-    all_data = sp.sparse.hstack([X, y]).todense()
-    sp.savetxt(output_filename, all_data, fmt='%.3f', delimiter=',', header="#" * len(header))
-    overwrite_header(header, output_filename)
-    logging.info("Wrote fold {} to {} ({} instances {} MB)".format(nth_fold, output_filename, n_samples,
-                                                                   get_size(output_filename)))
-
-
-def overwrite_header(header, output_filename):
-    """
-    Fixes the header by re-writing the header in place using FileInput.
-
-    :param header: the correct header
-    :param output_filename:
-    """
-    with fileinput.FileInput(output_filename, inplace=1) as fi:
-        fi.readline()
-        print(header)
-        for line in fi:
-            print(line, end='')
 
 
 def get_pos_header(features, simple_headers):

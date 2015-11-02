@@ -1,6 +1,14 @@
 import logging
 import json
 import os
+import warnings
+import fileinput
+
+from scipy.sparse import hstack
+from scipy import savetxt
+from sklearn.datasets import dump_svmlight_file
+
+from util.file import get_size
 
 
 def make_csv_row(x, i, pos_vects, rants_vects) -> str:
@@ -152,3 +160,59 @@ def save_features_json(filepath, feature_names):
     with open(filepath, mode='w') as out:
         out.write(json.dumps(feature_names, ensure_ascii=False, indent=4, separators=(',', ':')))
         logging.info("Saved {} features to JSON ({})".format(len(feature_names), filepath))
+
+
+def make_header(rant_stat_features, userprofile_features=list(), pos_features=list(), rant_features=list(),
+                feature_name_header=False):
+    header = ','.join(rant_stat_features + userprofile_features)
+    n_pos_features = len(pos_features)
+    if n_pos_features:
+        if feature_name_header:
+            header += ',' + ','.join(pos_features)
+        else:
+            header += ',' + ','.join("pos_" + str(i) for i in range(n_pos_features))
+    n_rant_features = len(rant_features)
+    if n_rant_features:
+        if feature_name_header:
+            header += ',' + ','.join(rant_features)
+        else:
+            header += ',' + ','.join("word_" + str(i) for i in range(n_rant_features))
+    header += ',target'
+    return header
+
+
+def dump_csv(output_path, instances, y, nth_fold, header, timestamp, sparse):
+    assert len(header.split(',')) == (instances.shape[1] + 1), "Header count and matrix feature count don't match!"
+    logging.debug(header)
+    logging.info("Dump CSV: {} features {} instances".format(instances.shape[1], instances.shape[0]))
+
+    output_filename = os.path.join(output_path, "{}-{}-{}.csv".format("price", timestamp, nth_fold))
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+    if sparse:
+        with open(output_filename, mode='wb') as f:
+            dump_svmlight_file(instances, y, f)
+        return
+    n_samples = instances.shape[0]
+    y = y.reshape((n_samples, 1))
+    all_data = hstack([instances, y]).todense()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        savetxt(output_filename, all_data, fmt='%.3f', delimiter=',', header="#" * len(header))
+        overwrite_header(header, output_filename)
+    logging.info("Wrote fold {} to {} ({} instances {} MB)".format(nth_fold, output_filename, n_samples,
+                                                                   get_size(output_filename)))
+
+
+def overwrite_header(header, output_filename):
+    """
+    Fixes the header by re-writing the header in place using FileInput.
+
+    :param header: the correct header
+    :param output_filename:
+    """
+    with fileinput.FileInput(output_filename, inplace=1) as fi:
+        fi.readline()
+        print(header)
+        for line in fi:
+            print(line, end='')
