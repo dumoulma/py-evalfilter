@@ -181,12 +181,12 @@ def make_header(rant_stat_features, userprofile_features=list(), pos_features=li
     return header
 
 
-def dump_csv(output_path, instances, y, nth_fold, header, timestamp, sparse):
+def dump_csv(output_path, instances, y, prefix, nth_fold, header, timestamp, sparse):
     assert len(header.split(',')) == (instances.shape[1] + 1), "Header count and matrix feature count don't match!"
     logging.debug(header)
     logging.info("Dump CSV: {} features {} instances".format(instances.shape[1], instances.shape[0]))
 
-    output_filename = os.path.join(output_path, "{}-{}-{}.csv".format("price", timestamp, nth_fold))
+    output_filename = os.path.join(output_path, "{}-{}-{}.csv".format(prefix, timestamp, nth_fold))
     if not os.path.exists(output_path):
         os.makedirs(output_path)
     if sparse:

@@ -85,15 +85,22 @@ class RantStats(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, rants):
-        def get_token_counts(_rants):
+        def get_counts(_rants):
             for rant in _rants:
-                yield token_counts(tokenize_rant(rant, min_length=1))
+                tokens = tokenize_rant(rant, min_length=1)
+                tokens = [t for t in tokens if t != '']
+                yield token_counts(tokens), token_type_counts(tokens)
 
         def avg_token_length(counts_dict):
             total_tokens = sum(counts_dict.values())
             if not token_counts:
                 return 0.0
             return sum([k * v for k, v in counts_dict.items()]) / total_tokens  # avgTokenLength
+
+        def token_ratio(type_count, total_tokens):
+            if type_count is 0 or total_tokens is 0:
+                return 0
+            return type_count / total_tokens
 
         return [{'kata': count_unicode_chars(rant, KATAKANA),
                  'hira': count_unicode_chars(rant, HIRAGANA),
@@ -102,6 +109,16 @@ class RantStats(BaseEstimator, TransformerMixin):
                  'digit': count_unicode_chars(rant, DIGIT),
                  'marks': count_chars_in_set(rant, is_mark),
                  'punct': count_chars_in_set(rant, is_punct),
+                 'kataTokens': type_dict['kata'],
+                 'hiraTokens': type_dict['hira'],
+                 'kanjiTokens': type_dict['kanji'],
+                 'alphaTokens': type_dict['alpha'],
+                 'digitTokens': type_dict['digit'],
+                 'kataTokensRatio': token_ratio(type_dict['kata'], sum(counts_dict.values())),
+                 'hiraTokensRatio': token_ratio(type_dict['hira'], sum(counts_dict.values())),
+                 'kanjiTokensRatio': token_ratio(type_dict['kanji'], sum(counts_dict.values())),
+                 'alphaTokensRatio': token_ratio(type_dict['alpha'], sum(counts_dict.values())),
+                 'digitTokensRatio': token_ratio(type_dict['digit'], sum(counts_dict.values())),
                  'tokens': sum(counts_dict.values()),
                  '1char': counts_dict[1],
                  '2char': counts_dict[2],
@@ -110,38 +127,8 @@ class RantStats(BaseEstimator, TransformerMixin):
                  '5+char': counts_dict[5],
                  'avgTokenLength': avg_token_length(counts_dict)
                  }
-                for rant, counts_dict in zip(rants, get_token_counts(rants))
+                for rant, (counts_dict, type_dict) in zip(rants, get_counts(rants))
                 ]
-
-
-def rant_text_features(x, rant):
-    """
-    Creates a number of new features based on the characteristics of the post words and characters.
-
-    :param x: the raw row data for a post
-    :param rant: the post text
-    :return:
-    """
-    x.append(count_unicode_chars(rant, KATAKANA))  # katacount
-    x.append(count_unicode_chars(rant, HIRAGANA))  # hiracount
-    x.append(count_unicode_chars(rant, KANJI))  # kanjicount
-    x.append(count_unicode_chars(rant, ALPHA))  # alphacount
-    x.append(count_unicode_chars(rant, DIGIT))  # digitcount
-    x.append(count_chars_in_set(rant, is_mark))  # markcount
-    x.append(count_chars_in_set(rant, is_punct))  # punctcount
-    counts_dict = token_counts(tokenize_rant(rant, min_length=1))
-    total_tokens = sum(counts_dict.values())
-    x.append(total_tokens)  # totaltokens (words)
-    x.append(counts_dict[1])  # 1chartokens
-    x.append(counts_dict[2])  # 2chartokens
-    x.append(counts_dict[3])  # 3chartokens
-    x.append(counts_dict[4])  # 4chartokens
-    x.append(counts_dict[5])  # 5+chartokens
-    if total_tokens > 0:
-        x.append(sum([k * v for k, v in counts_dict.items()]) / total_tokens)  # avgTokenLength
-    else:
-        x.append(0)
-    return x
 
 
 def is_digit(c):
@@ -160,7 +147,7 @@ def is_katakana(c):
     try:
         return unicodedata.name(c)[:len(KATAKANA)] == KATAKANA
     except ValueError as ve:
-        logging.warning(ve)
+        logging.warning("is_katakana: {}:'{}'".format(ve, c))
     return False
 
 
@@ -168,23 +155,31 @@ def is_hiragana(c):
     try:
         return unicodedata.name(c)[:len(HIRAGANA)] == HIRAGANA
     except ValueError as ve:
-        logging.warning(ve)
+        logging.warning("is_hiragana: {}:'{}'".format(ve, c))
     return False
 
 
 def is_kanji(c):
-    return unicodedata.name(c)[:len(KANJI)] == KANJI
+    try:
+        return unicodedata.name(c)[:3] == "CJK"
+    except ValueError as ve:
+        logging.warning("is_kanji: {}:'{}'".format(ve, c))
+    return False
 
 
 def is_alphabet(c):
-    return unicodedata.name(c)[:len(ALPHA)] == ALPHA
+    try:
+        return unicodedata.name(c)[:len(ALPHA)] == ALPHA
+    except ValueError as ve:
+        logging.warning("is_alphabet: {}:'{}'".format(ve, c))
+    return False
 
 
 def is_unicode_name(name, c):
     try:
         return unicodedata.name(c)[:len(name)] == name
     except ValueError as ve:
-        logging.warning(ve)
+        logging.warning("is_unicode_name: {}:'{}'".format(ve, c))
     return False
 
 
@@ -206,6 +201,27 @@ def token_counts(rant_tokens):
     if 0 in counts_:
         counts_.pop(0)
     return counts_
+
+
+def token_type_counts(rant_tokens):
+    type_counts_ = dict()
+    type_counts_['kata'] = 0
+    type_counts_['hira'] = 0
+    type_counts_['kanji'] = 0
+    type_counts_['alpha'] = 0
+    type_counts_['digit'] = 0
+    for t in rant_tokens:
+        if all(is_katakana(c) for c in t):
+            type_counts_['kata'] += 1
+        if all(is_hiragana(c) for c in t):
+            type_counts_['hira'] += 1
+        if any(is_kanji(c) for c in t):  # a kanji word has at least one kanji
+            type_counts_['kanji'] += 1
+        if all(is_alphabet(c) for c in t):
+            type_counts_['alpha'] += 1
+        if t.isdigit():
+            type_counts_['digit'] += 1
+    return type_counts_
 
 
 def vectorize_text(raw_documents, _, vectorizer, tokenizer, min_df, max_features, stop_words=None, ngram_range=(1, 1)):

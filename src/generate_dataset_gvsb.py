@@ -11,21 +11,20 @@ import numpy as np
 
 from sklearn.feature_extraction import DictVectorizer
 
-from sklearn.cross_validation import StratifiedKFold
+from sklearn.cross_validation import StratifiedShuffleSplit
 
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 
 from sklearn.pipeline import FeatureUnion, Pipeline
 
-from datasets.fuman_base import load_fuman_gvb
-from datasets.output import save_dataset_metadata, save_features_json, make_header, dump_csv
+from datasets import load_fuman_gvb
 from util.mecab import tokenize_pos
-from datasets.fuman_features import RantStats
+from evalfilter import RantStats, save_dataset_metadata, save_features_json, make_header, dump_csv
 
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
-GOOD_FILENAME = "good-rants-4189.csv"
-BAD_FILENAME = "bad-rants-4189.csv"
+GOOD_FILENAME = "good-rants.csv"
+BAD_FILENAME = "bad-rants.csv"
 PRICE_FILENAME = "rants-price.csv"
 VECTORIZERS = {'tfidf': TfidfVectorizer, 'count': CountVectorizer}
 
@@ -37,7 +36,7 @@ VECTORIZERS = {'tfidf': TfidfVectorizer, 'count': CountVectorizer}
 @click.option('--n_folds_max', default=2)
 @click.option('--pos_max_features', default=3000)
 @click.option('--pos_min_df', default=25)
-@click.option('--pos_ngram', default=2)
+@click.option('--pos_ngram', default=3)
 @click.option('--pos_vec', type=click.Choice(['tfidf', 'count']), default='count')
 @click.option('--sparse', is_flag=True)
 @click.option('--feature_name_header', is_flag=True)
@@ -73,6 +72,9 @@ def main(source, output, n_folds, n_folds_max, pos_max_features, pos_min_df, pos
     vectorizer = None
     pos_dict_filename = os.path.join(output_path, "pos-vocabulary-" + timestamp + ".json")
     if pos_max_features:
+        logging.info("Adding POS vectorization with max_features: {} ngram: {} max_df: {}".format(pos_max_features,
+                                                                                                  pos_ngram,
+                                                                                                  pos_min_df))
         pos_vectorizer_func = VECTORIZERS[pos_vec]
         vectorizer = pos_vectorizer_func(tokenizer=tokenize_pos, ngram_range=(1, pos_ngram), strip_accents='unicode',
                                          min_df=pos_min_df, max_features=pos_max_features)
@@ -99,21 +101,14 @@ def main(source, output, n_folds, n_folds_max, pos_max_features, pos_min_df, pos
         header = make_header(rant_stats_vectorizer.get_feature_names(), pos_features=pos_features,
                              feature_name_header=feature_name_header)
         logging.info("Saving {} folds to disk...".format(n_folds))
-        skf = StratifiedKFold(y, n_folds=n_folds, shuffle=True)
-        for i, (_, test_index) in enumerate(skf, 1):
-            dump_csv(output_path, instances[test_index], y[test_index], i, header, timestamp, sparse)
+        splits = StratifiedShuffleSplit(y, test_size=1.0 / n_folds)
+        for i, (_, test_index) in enumerate(splits, 1):
+            dump_csv(output_path, instances[test_index], y[test_index], "gvsb", i, header, timestamp, sparse)
             if i == n_folds_max:
                 break
         save_dataset_metadata(sparse, output_path, "goodvsbad", source_filepath=source, timestamp=timestamp,
                               pos_vectorizer=vectorizer, tokenize_pos=tokenize_pos)
     logging.info("Work complete!")
-
-
-def get_pos_header(features, simple_headers):
-    headers = features
-    if simple_headers:
-        headers = ["pos_" + str(i) for i in range(len(features))]
-    return ','.join(headers)
 
 
 if __name__ == "__main__":

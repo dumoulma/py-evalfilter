@@ -11,16 +11,16 @@ import numpy as np
 
 from sklearn.feature_extraction import DictVectorizer
 
-from sklearn.cross_validation import StratifiedKFold
+from sklearn.cross_validation import StratifiedShuffleSplit
 
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 
 from sklearn.pipeline import FeatureUnion, Pipeline
 
-from datasets.fuman_base import load_fuman_price
-from datasets.output import save_dataset_metadata, save_features_json, make_header, dump_csv
+from datasets import load_fuman_price
 from util.mecab import tokenize_pos, tokenize_rant
-from datasets.fuman_features import FieldSelector, RantStats, UserProfileStats
+from evalfilter import FieldSelector, RantStats, UserProfileStats, save_dataset_metadata, save_features_json, \
+    make_header, dump_csv
 
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
@@ -142,9 +142,9 @@ def main(source, output, n_folds, n_folds_max, word_max_features, word_min_df, p
         if n_folds == 1:
             dump_csv(output_path, instances, y, 0, header, timestamp, sparse)
         else:
-            skf = StratifiedKFold(y, n_folds=n_folds, shuffle=True)
+            skf = StratifiedShuffleSplit(y, n_folds=n_folds, shuffle=True)
             for i, (_, test_index) in enumerate(skf, 1):
-                dump_csv(output_path, instances[test_index], y[test_index], i, header, timestamp, sparse)
+                dump_csv(output_path, instances[test_index], y[test_index], "price", i, header, timestamp, sparse)
                 if i == n_folds_max:
                     break
         save_dataset_metadata(sparse, output_path, "price",

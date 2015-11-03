@@ -157,22 +157,3 @@ def load_fuman_gvb(file_path, bad_filename="bad-rants.csv", good_filename="good-
     return Bunch(data=data,
                  target=target,
                  DESCR="Fuman DB csv dump dataset")
-
-# def load_fuman(file_path):
-#     data, target = zip(*[(r[:-1], r[-1]) for r in FumanDataset(file_path)])
-#     logging.info("Finished reading data")
-#     data, target = list(data), list(target)
-#     le1 = pp.LabelEncoder()
-#     encoded_gender = le1.fit_transform([x[23] for x in data])
-#     le2 = pp.LabelEncoder()
-#     encoded_state = le2.fit_transform([x[23] for x in data])
-#     le3 = pp.LabelEncoder()
-#     encoded_job = le3.fit_transform([x[23] for x in data])
-#     for x, eg, es, ej in zip(data, encoded_gender, encoded_state, encoded_job):
-#         x[23] = eg
-#         x[25] = es
-#         x[26] = ej
-#     return Bunch(data=data,
-#                  target=target,
-#                  target_names=np.arange(10),
-#                  DESCR="Fuman DB csv dump dataset")
