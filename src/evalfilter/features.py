@@ -147,7 +147,7 @@ def is_katakana(c):
     try:
         return unicodedata.name(c)[:len(KATAKANA)] == KATAKANA
     except ValueError as ve:
-        logging.warning("is_katakana: {}:'{}'".format(ve, c))
+        logging.debug("WARNING: is_katakana: {}:'{}'".format(ve, c))
     return False
 
 
@@ -155,7 +155,7 @@ def is_hiragana(c):
     try:
         return unicodedata.name(c)[:len(HIRAGANA)] == HIRAGANA
     except ValueError as ve:
-        logging.warning("is_hiragana: {}:'{}'".format(ve, c))
+        logging.debug("WARNING: is_hiragana: {}:'{}'".format(ve, c))
     return False
 
 
@@ -163,7 +163,7 @@ def is_kanji(c):
     try:
         return unicodedata.name(c)[:3] == "CJK"
     except ValueError as ve:
-        logging.warning("is_kanji: {}:'{}'".format(ve, c))
+        logging.debug("WARNING: is_kanji: {}:'{}'".format(ve, c))
     return False
 
 
@@ -171,7 +171,7 @@ def is_alphabet(c):
     try:
         return unicodedata.name(c)[:len(ALPHA)] == ALPHA
     except ValueError as ve:
-        logging.warning("is_alphabet: {}:'{}'".format(ve, c))
+        logging.debug("WARNING: is_alphabet: {}:'{}'".format(ve, c))
     return False
 
 
@@ -179,7 +179,7 @@ def is_unicode_name(name, c):
     try:
         return unicodedata.name(c)[:len(name)] == name
     except ValueError as ve:
-        logging.warning("is_unicode_name: {}:'{}'".format(ve, c))
+        logging.debug("WARNING: is_unicode_name: {}:'{}'".format(ve, c))
     return False
 
 
