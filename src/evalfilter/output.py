@@ -162,9 +162,9 @@ def save_features_json(filepath, feature_names):
         logging.info("Saved {} features to JSON ({})".format(len(feature_names), filepath))
 
 
-def make_header(rant_stat_features, userprofile_features=list(), pos_features=list(), rant_features=list(),
-                feature_name_header=False):
-    header = ','.join(rant_stat_features + userprofile_features)
+def make_header(rant_stat_features, userprofile_features=list(), token_type_features=list(), pos_features=list(),
+                rant_features=list(), feature_name_header=False):
+    header = ','.join(rant_stat_features + userprofile_features + token_type_features)
     n_pos_features = len(pos_features)
     if n_pos_features:
         if feature_name_header:

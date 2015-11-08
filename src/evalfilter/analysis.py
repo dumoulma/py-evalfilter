@@ -2,6 +2,8 @@ from functools import partial
 
 import MeCab
 
+import evalfilter
+
 mecab = MeCab.Tagger("-Ochasen -d /usr/local/lib/mecab/dic/mecab-ipadic-neologd")
 STOPWORDS = {'の', 'が', 'て', '、', 'する', 'ある', 'です', 'ます', 'た', 'が', 'から', 'れる', 'いる', '「', '\u3000', '」',
              'と', 'くる', 'で', 'ない', 'を', 'に', 'なる', '。', 'だ', 'のに', 'でる', 'は', 'よう', 'も', 'しか', 'いう',
@@ -23,3 +25,8 @@ def tokenize_rant(text, min_length=2):
 
 def tokenize_pos(text):
     return partial(tokenize, field=3)(text=text)
+
+
+def tokenize_token_type(text, min_length=1):
+    tokens = partial(tokenize, field=2)(text=text, min_length=min_length)
+    return [evalfilter.map_to_token_type(tok) for tok in tokens]

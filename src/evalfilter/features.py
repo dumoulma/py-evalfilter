@@ -6,7 +6,7 @@ import scipy.sparse as sp
 from sklearn.base import BaseEstimator, TransformerMixin
 
 import unicodedata
-from util.mecab import tokenize_rant
+from evalfilter.analysis import tokenize_rant
 
 KATAKANA = "KATAKANA"
 HIRAGANA = "HIRAGANA"
@@ -203,6 +203,24 @@ def token_counts(rant_tokens):
     return counts_
 
 
+def map_to_token_type(word):
+    if all(is_katakana(c) for c in word):
+        return "kata"
+    if all(is_hiragana(c) for c in word):
+        return "hira"
+    if all(is_kanji(c) or is_hiragana(c) for c in word):  # a kanji word has at least one kanji
+        return "kanji"
+    if all(is_alphabet(c) for c in word):
+        return "alpha"
+    if word.isdigit():
+        return "digit"
+    if all(is_punct(c) for c in word):
+        return "punct"
+    if all(is_mark(c) for c in word):
+        return "mark"
+    return "other"
+
+
 def token_type_counts(rant_tokens):
     type_counts_ = dict()
     type_counts_['kata'] = 0
@@ -215,7 +233,7 @@ def token_type_counts(rant_tokens):
             type_counts_['kata'] += 1
         if all(is_hiragana(c) for c in t):
             type_counts_['hira'] += 1
-        if any(is_kanji(c) for c in t):  # a kanji word has at least one kanji
+        if all(is_kanji(c) or is_hiragana(c) for c in t):  # a kanji word has at least one kanji
             type_counts_['kanji'] += 1
         if all(is_alphabet(c) for c in t):
             type_counts_['alpha'] += 1

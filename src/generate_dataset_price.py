@@ -8,17 +8,13 @@ import warnings
 
 import click
 import numpy as np
-
 from sklearn.feature_extraction import DictVectorizer
-
 from sklearn.cross_validation import StratifiedShuffleSplit
-
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
-
 from sklearn.pipeline import FeatureUnion, Pipeline
 
 from datasets import load_fuman_price
-from util.mecab import tokenize_pos, tokenize_rant
+from evalfilter.analysis import tokenize_pos, tokenize_rant
 from evalfilter import FieldSelector, RantStats, UserProfileStats, save_dataset_metadata, save_features_json, \
     make_header, dump_csv
 
