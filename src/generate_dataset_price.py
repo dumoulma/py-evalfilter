@@ -8,13 +8,17 @@ import warnings
 
 import click
 import numpy as np
+
 from sklearn.feature_extraction import DictVectorizer
-from sklearn.cross_validation import StratifiedShuffleSplit
+
+from sklearn.cross_validation import KFold
+
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
+
 from sklearn.pipeline import FeatureUnion, Pipeline
 
 from datasets import load_fuman_price
-from evalfilter.analysis import tokenize_pos, tokenize_rant
+from evalfilter.analysis import tokenize_pos, tokenize_rant, tokenize_token_type
 from evalfilter import FieldSelector, RantStats, UserProfileStats, save_dataset_metadata, save_features_json, \
     make_header, dump_csv
 
@@ -29,18 +33,22 @@ VECTORIZERS = {'tfidf': TfidfVectorizer, 'count': CountVectorizer}
 @click.command()
 @click.argument('source', type=click.Path(), nargs=1)
 @click.argument('output', type=click.Path(), nargs=1)
-@click.option('--n_folds', default=5)
-@click.option('--n_folds_max', default=2)
+@click.option('--n_folds', default=3)
+@click.option('--n_folds_max', default=1)
 @click.option('--pos_max_features', default=3000)
 @click.option('--pos_min_df', default=25)
-@click.option('--word_max_features', default=3000)
+@click.option('--type_max_features', default=1000)
+@click.option('--type_min_df', default=10)
+@click.option('--type_ngram', default=3)
+@click.option('--word_max_features', default=0)
 @click.option('--word_min_df', default=25)
 @click.option('--pos_ngram', default=2)
 @click.option('--pos_vec', type=click.Choice(['tfidf', 'count']), default='count')
+@click.option('--type_vec', type=click.Choice(['tfidf', 'count']), default='count')
 @click.option('--sparse', is_flag=True)
 @click.option('--feature_name_header', is_flag=True)
 def main(source, output, n_folds, n_folds_max, word_max_features, word_min_df, pos_max_features, pos_min_df,
-         pos_vec, pos_ngram, sparse, feature_name_header):
+         pos_vec, pos_ngram, type_max_features, type_min_df, type_vec, type_ngram, sparse, feature_name_header):
     """
     Generates a good vs bad training dataset from Fuman user posts. (Binary Classification)
 
@@ -74,8 +82,9 @@ def main(source, output, n_folds, n_folds_max, word_max_features, word_min_df, p
     output_path = os.path.join(output, "price-{}".format(timestamp))
 
     logging.info("Timestamp: {}".format(timestamp))
-    rant_dict_filename = os.path.join(output_path, "rant-features-" + timestamp + ".json")
     pos_dict_filename = os.path.join(output_path, "pos-features-" + timestamp + ".json")
+    type_dict_filename = os.path.join(output_path, "type-features-" + timestamp + ".json")
+    rant_dict_filename = os.path.join(output_path, "rant-features-" + timestamp + ".json")
 
     rant_stats_vectorizer = DictVectorizer()
     userprofile_vectorizer = DictVectorizer()
@@ -94,14 +103,23 @@ def main(source, output, n_folds, n_folds_max, word_max_features, word_min_df, p
 
     pos_vectorizer_func = VECTORIZERS[pos_vec]
     pos_vectorizer = None
+    type_vectorizer_func = VECTORIZERS[type_vec]
+    type_vectorizer = None
     word_vectorizer = None
     if pos_max_features:
         pos_vectorizer = pos_vectorizer_func(tokenizer=tokenize_pos, ngram_range=(1, pos_ngram),
-                                             strip_accents='unicode',
-                                             min_df=pos_min_df, max_features=pos_max_features)
+                                             strip_accents='unicode', min_df=pos_min_df, max_features=pos_max_features)
         transformer_list.append(('pos_bow', Pipeline([
             ('selector', FieldSelector(key='rant')),
             ('vectorize', pos_vectorizer),
+        ])))
+    if type_max_features:
+        type_vectorizer = type_vectorizer_func(tokenizer=tokenize_token_type, ngram_range=(1, type_ngram),
+                                               strip_accents='unicode', min_df=type_min_df,
+                                               max_features=type_max_features)
+        transformer_list.append(('type_bow', Pipeline([
+            ('selector', FieldSelector(key='rant')),
+            ('vectorize', type_vectorizer),
         ])))
     if word_max_features:
         word_vectorizer = TfidfVectorizer(tokenizer=tokenize_rant, strip_accents='unicode', min_df=word_min_df,
@@ -115,7 +133,6 @@ def main(source, output, n_folds, n_folds_max, word_max_features, word_min_df, p
     ])
 
     fuman_data = load_fuman_price(source_dir, filename=source_filename)
-
     logging.info("Processing pipeline...")
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", module="sklearn")
@@ -124,30 +141,37 @@ def main(source, output, n_folds, n_folds_max, word_max_features, word_min_df, p
         y = np.asarray(fuman_data.target, dtype=np.int8).reshape((n_samples,))
 
         pos_features = list()
+        type_features = list()
         rant_features = list()
         if pos_max_features:
             pos_features = pos_vectorizer.get_feature_names()
             save_features_json(pos_dict_filename, pos_features)
+        if type_max_features:
+            type_features = type_vectorizer.get_feature_names()
+            save_features_json(type_dict_filename, type_features)
         if word_max_features:
             rant_features = word_vectorizer.get_feature_names()
             save_features_json(rant_dict_filename, rant_features)
         header = make_header(rant_stats_vectorizer.get_feature_names(),
                              userprofile_vectorizer.get_feature_names(),
-                             pos_features, rant_features, feature_name_header)
+                             pos_features, type_features, rant_features, feature_name_header)
         logging.info("Saving {} of {} folds to disk...".format(n_folds_max, n_folds))
         if n_folds == 1:
             dump_csv(output_path, instances, y, 0, header, timestamp, sparse)
         else:
-            skf = StratifiedShuffleSplit(y, n_folds=n_folds, shuffle=True)
+            skf = KFold(n=n_samples, n_folds=n_folds, shuffle=True)
             for i, (_, test_index) in enumerate(skf, 1):
                 dump_csv(output_path, instances[test_index], y[test_index], "price", i, header, timestamp, sparse)
                 if i == n_folds_max:
                     break
-        save_dataset_metadata(sparse, output_path, "price",
-                              pos_vectorizer=pos_vectorizer, source_filepath=source, timestamp=timestamp,
-                              word_vectorizer=word_vectorizer, tokenize_rant=tokenize_rant, tokenize_pos=tokenize_pos)
+        save_dataset_metadata(sparse, output_path, "price", source_filepath=source, timestamp=timestamp,
+                              word_vectorizer=word_vectorizer, tokenize_rant=tokenize_rant,
+                              pos_vectorizer=pos_vectorizer, tokenize_pos=tokenize_pos, type_vectorizer=type_vectorizer,
+                              tokenize_type=tokenize_token_type)
     logging.info("Work complete!")
 
 
 if __name__ == "__main__":
-    main()
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="getargspec", category=DeprecationWarning)
+        main()

@@ -7,7 +7,6 @@ from collections import defaultdict
 from sklearn.datasets.base import Bunch
 
 import unicodedata
-import warnings
 
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
@@ -41,11 +40,13 @@ def to_binary_categorical(raw_field):
 def check_row_format(i, row):
     if not isinstance(row, list):
         row = row.rstrip().split(',')
-    if len(row) is not 16:
+    if len(row) is not 16 and len(row) is not 15:
         logging.debug("Row with bad number of fields at line {}".format(i))
         return False
     try:
-        int(row[1]), int(row[2]), int(row[3]), int(row[4]), int(row[6]), int(row[7]), int(row[8]), int(row[15])
+        int(row[1]), int(row[2]), int(row[3]), int(row[4]), int(row[6]), int(row[7]), int(row[8])
+        if len(row) is 16:
+            int(row[15])
         return True
     except ValueError as ve:
         logging.debug("Parse problem for row {}: {} ({})".format(i, row, ve))
@@ -105,7 +106,7 @@ def load_fuman_userprofile(file_path, target_func):
                  DESCR="Fuman DB csv dump dataset")
 
 
-def load_fuman_rant(file_path, target_func):
+def load_fuman_rant(file_path, target_func=fuman_gvb_target):
     data = list()
     target = list()
     parse_errors = 0
@@ -119,7 +120,10 @@ def load_fuman_rant(file_path, target_func):
                 continue
             data.append(unicodedata.normalize('NFKC', row[5]))
             status = int(row[6])
-            price = int(row[15])
+            if len(row) is 16:
+                price = int(row[15])
+            else:
+                price = 0
             target.append(target_func(status, price))
             n_samples += 1
     logging.info('Finished loading data. (read: {} errors: {})'.format(n_samples, parse_errors))

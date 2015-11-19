@@ -129,18 +129,22 @@ def save_dataset_metadata2(encode, output_path, dataset_type, pos_max_features, 
 
 
 def save_dataset_metadata(encode, output_path, dataset_type, source_filepath, timestamp,
-                          pos_vectorizer=None, word_vectorizer=None, tokenize_rant=None, tokenize_pos=None):
+                          pos_vectorizer=None, word_vectorizer=None, type_vectorizer=None, tokenize_rant=None,
+                          tokenize_pos=None, tokenize_type=None):
     dataset_meta = {
         'timestamp': timestamp,
         'dataset': dataset_type,
         'input': str(source_filepath),
     }
-    if word_vectorizer:
-        dataset_meta['word_tokenizer'] = tokenize_rant.__name__
-        dataset_meta['word_vectorizer'] = str(word_vectorizer)
     if pos_vectorizer:
         dataset_meta['pos_tokenizer'] = tokenize_pos.__name__
         dataset_meta['pos_vectorizer'] = str(pos_vectorizer)
+    if type_vectorizer:
+        dataset_meta['type_tokenizer'] = tokenize_type.__name__
+        dataset_meta['type_vectorizer'] = str(type_vectorizer)
+    if word_vectorizer:
+        dataset_meta['word_tokenizer'] = tokenize_rant.__name__
+        dataset_meta['word_vectorizer'] = str(word_vectorizer)
     if encode:
         dataset_meta['encode_categoricals'] = 'True'
     metadata_output = os.path.join(output_path, "metadata-{}.json".format(timestamp))
@@ -162,15 +166,21 @@ def save_features_json(filepath, feature_names):
         logging.info("Saved {} features to JSON ({})".format(len(feature_names), filepath))
 
 
-def make_header(rant_stat_features, userprofile_features=list(), token_type_features=list(), pos_features=list(),
+def make_header(rant_stat_features, userprofile_features=list(), pos_features=list(), token_type_features=list(),
                 rant_features=list(), feature_name_header=False):
-    header = ','.join(rant_stat_features + userprofile_features + token_type_features)
+    header = ','.join(rant_stat_features + userprofile_features)
     n_pos_features = len(pos_features)
     if n_pos_features:
         if feature_name_header:
             header += ',' + ','.join(pos_features)
         else:
             header += ',' + ','.join("pos_" + str(i) for i in range(n_pos_features))
+    n_type_features = len(token_type_features)
+    if n_type_features:
+        if feature_name_header:
+            header += ',' + ','.join(token_type_features)
+        else:
+            header += ',' + ','.join("type_" + str(i) for i in range(n_type_features))
     n_rant_features = len(rant_features)
     if n_rant_features:
         if feature_name_header:

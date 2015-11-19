@@ -17,15 +17,15 @@ MARKS = {'!', '?', '！', '？'}
 PUNCT = {'、', '。', '「', '」', '（', '）', '＆', 'ー', '-', '＃', '￥'}
 
 
-def get_header():
-    return "katacount,hiracount,kanjicount,alphacount,digitcount,markcount,punctcount,totaltokens,1chartokens," + \
-           "2chartokens,3chartokens,4chartokens,5+chartokens,avgTokenLength"
-
-
-def get_header_userprofile():
-    return "katacount,hiracount,kanjicount,alphacount,digitcount,markcount,punctcount,totaltokens,1chartokens," + \
-           "2chartokens,3chartokens,4chartokens,5+chartokens,avgTokenLength,hasindustry,hasoccupation,hascompany," + \
-           "hasprodname,hasproposal,empathies,birthyear,state,gender,job"
+# def get_header():
+#     return "katacount,hiracount,kanjicount,alphacount,digitcount,markcount,punctcount,totaltokens,1chartokens," + \
+#            "2chartokens,3chartokens,4chartokens,5+chartokens,avgTokenLength"
+#
+#
+# def get_header_userprofile():
+#     return "katacount,hiracount,kanjicount,alphacount,digitcount,markcount,punctcount,totaltokens,1chartokens," + \
+#            "2chartokens,3chartokens,4chartokens,5+chartokens,avgTokenLength,hasindustry,hasoccupation,hascompany," + \
+#            "hasprodname,hasproposal,empathies,birthyear,state,gender,job"
 
 
 class FieldSelector(BaseEstimator, TransformerMixin):
@@ -109,11 +109,6 @@ class RantStats(BaseEstimator, TransformerMixin):
                  'digit': count_unicode_chars(rant, DIGIT),
                  'marks': count_chars_in_set(rant, is_mark),
                  'punct': count_chars_in_set(rant, is_punct),
-                 'kataTokens': type_dict['kata'],
-                 'hiraTokens': type_dict['hira'],
-                 'kanjiTokens': type_dict['kanji'],
-                 'alphaTokens': type_dict['alpha'],
-                 'digitTokens': type_dict['digit'],
                  'kataTokensRatio': token_ratio(type_dict['kata'], sum(counts_dict.values())),
                  'hiraTokensRatio': token_ratio(type_dict['hira'], sum(counts_dict.values())),
                  'kanjiTokensRatio': token_ratio(type_dict['kanji'], sum(counts_dict.values())),
