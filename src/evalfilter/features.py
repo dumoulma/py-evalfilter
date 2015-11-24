@@ -17,17 +17,6 @@ MARKS = {'!', '?', '！', '？'}
 PUNCT = {'、', '。', '「', '」', '（', '）', '＆', 'ー', '-', '＃', '￥'}
 
 
-# def get_header():
-#     return "katacount,hiracount,kanjicount,alphacount,digitcount,markcount,punctcount,totaltokens,1chartokens," + \
-#            "2chartokens,3chartokens,4chartokens,5+chartokens,avgTokenLength"
-#
-#
-# def get_header_userprofile():
-#     return "katacount,hiracount,kanjicount,alphacount,digitcount,markcount,punctcount,totaltokens,1chartokens," + \
-#            "2chartokens,3chartokens,4chartokens,5+chartokens,avgTokenLength,hasindustry,hasoccupation,hascompany," + \
-#            "hasprodname,hasproposal,empathies,birthyear,state,gender,job"
-
-
 class FieldSelector(BaseEstimator, TransformerMixin):
     """For data grouped by feature, select subset of data at a provided key.
 

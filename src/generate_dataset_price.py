@@ -37,12 +37,12 @@ VECTORIZERS = {'tfidf': TfidfVectorizer, 'count': CountVectorizer}
 @click.option('--n_folds_max', default=1)
 @click.option('--pos_max_features', default=3000)
 @click.option('--pos_min_df', default=25)
+@click.option('--pos_ngram', default=2)
 @click.option('--type_max_features', default=1000)
 @click.option('--type_min_df', default=10)
 @click.option('--type_ngram', default=3)
 @click.option('--word_max_features', default=0)
 @click.option('--word_min_df', default=25)
-@click.option('--pos_ngram', default=2)
 @click.option('--pos_vec', type=click.Choice(['tfidf', 'count']), default='count')
 @click.option('--type_vec', type=click.Choice(['tfidf', 'count']), default='count')
 @click.option('--sparse', is_flag=True)
@@ -78,7 +78,7 @@ def main(source, output, n_folds, n_folds_max, word_max_features, word_min_df, p
         source_filename = PRICE_FILENAME
     logging.info("Source dump: {}/{}".format(source_dir, source_filename))
 
-    timestamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d-%H_%M_%S')
+    timestamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d_%H-%M-%S')
     output_path = os.path.join(output, "price-{}".format(timestamp))
 
     logging.info("Timestamp: {}".format(timestamp))
@@ -157,7 +157,7 @@ def main(source, output, n_folds, n_folds_max, word_max_features, word_min_df, p
                              pos_features, type_features, rant_features, feature_name_header)
         logging.info("Saving {} of {} folds to disk...".format(n_folds_max, n_folds))
         if n_folds == 1:
-            dump_csv(output_path, instances, y, 0, header, timestamp, sparse)
+            dump_csv(output_path, instances, y, "price", 0, header, timestamp, sparse)
         else:
             skf = KFold(n=n_samples, n_folds=n_folds, shuffle=True)
             for i, (_, test_index) in enumerate(skf, 1):
